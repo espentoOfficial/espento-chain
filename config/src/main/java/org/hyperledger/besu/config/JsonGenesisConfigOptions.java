@@ -17,6 +17,7 @@ package org.hyperledger.besu.config;
 import static java.util.Collections.emptyMap;
 import static java.util.Objects.isNull;
 
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
 
@@ -38,7 +39,6 @@ import org.apache.tuweni.units.bigints.UInt256;
 public class JsonGenesisConfigOptions implements GenesisConfigOptions {
 
   private static final String ETHASH_CONFIG_KEY = "ethash";
-  private static final String KECCAK256_CONFIG_KEY = "keccak256";
   private static final String IBFT_LEGACY_CONFIG_KEY = "ibft";
   private static final String IBFT2_CONFIG_KEY = "ibft2";
   private static final String QBFT_CONFIG_KEY = "qbft";
@@ -48,6 +48,7 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   private static final String DISCOVERY_CONFIG_KEY = "discovery";
   private static final String CHECKPOINT_CONFIG_KEY = "checkpoint";
   private static final String ZERO_BASE_FEE_KEY = "zerobasefee";
+  private static final String DEPOSIT_CONTRACT_ADDRESS_KEY = "depositcontractaddress";
 
   private final ObjectNode configRoot;
   private final Map<String, String> configOverrides = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
@@ -109,12 +110,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   public String getConsensusEngine() {
     if (isEthHash()) {
       return ETHASH_CONFIG_KEY;
-    } else if (isKeccak256()) {
-      return KECCAK256_CONFIG_KEY;
     } else if (isIbft2()) {
       return IBFT2_CONFIG_KEY;
-    } else if (isIbftLegacy()) {
-      return IBFT_LEGACY_CONFIG_KEY;
     } else if (isQbft()) {
       return QBFT_CONFIG_KEY;
     } else if (isClique()) {
@@ -127,11 +124,6 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   @Override
   public boolean isEthHash() {
     return configRoot.has(ETHASH_CONFIG_KEY);
-  }
-
-  @Override
-  public boolean isKeccak256() {
-    return configRoot.has(KECCAK256_CONFIG_KEY);
   }
 
   @Override
@@ -155,10 +147,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public IbftLegacyConfigOptions getIbftLegacyConfigOptions() {
-    return JsonUtil.getObjectNode(configRoot, IBFT_LEGACY_CONFIG_KEY)
-        .map(IbftLegacyConfigOptions::new)
-        .orElse(IbftLegacyConfigOptions.DEFAULT);
+  public boolean isPoa() {
+    return isQbft() || isClique() || isIbft2() || isIbftLegacy();
   }
 
   @Override
@@ -202,13 +192,6 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
     return JsonUtil.getObjectNode(configRoot, ETHASH_CONFIG_KEY)
         .map(EthashConfigOptions::new)
         .orElse(EthashConfigOptions.DEFAULT);
-  }
-
-  @Override
-  public Keccak256ConfigOptions getKeccak256ConfigOptions() {
-    return JsonUtil.getObjectNode(configRoot, KECCAK256_CONFIG_KEY)
-        .map(Keccak256ConfigOptions::new)
-        .orElse(Keccak256ConfigOptions.DEFAULT);
   }
 
   @Override
@@ -398,8 +381,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public OptionalLong getEcip1049BlockNumber() {
-    return getOptionalLong("ecip1049block");
+  public OptionalLong getSpiralBlockNumber() {
+    return getOptionalLong("spiralblock");
   }
 
   @Override
@@ -423,20 +406,8 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public boolean isQuorum() {
-    return getOptionalBoolean("isquorum").orElse(false);
-  }
-
-  @Override
-  public OptionalLong getQip714BlockNumber() {
-    return getOptionalLong("qip714block");
-  }
-
-  @Override
   public PowAlgorithm getPowAlgorithm() {
-    return isEthHash()
-        ? PowAlgorithm.ETHASH
-        : isKeccak256() ? PowAlgorithm.KECCAK256 : PowAlgorithm.UNSUPPORTED;
+    return isEthHash() ? PowAlgorithm.ETHASH : PowAlgorithm.UNSUPPORTED;
   }
 
   @Override
@@ -447,6 +418,12 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   @Override
   public boolean isZeroBaseFee() {
     return getOptionalBoolean(ZERO_BASE_FEE_KEY).orElse(false);
+  }
+
+  @Override
+  public Optional<Address> getDepositContractAddress() {
+    Optional<String> inputAddress = JsonUtil.getString(configRoot, DEPOSIT_CONTRACT_ADDRESS_KEY);
+    return inputAddress.map(Address::fromHexString);
   }
 
   @Override
@@ -488,11 +465,13 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
     getThanosBlockNumber().ifPresent(l -> builder.put("thanosBlock", l));
     getMagnetoBlockNumber().ifPresent(l -> builder.put("magnetoBlock", l));
     getMystiqueBlockNumber().ifPresent(l -> builder.put("mystiqueBlock", l));
-    getEcip1049BlockNumber().ifPresent(l -> builder.put("ecip1049Block", l));
+    getSpiralBlockNumber().ifPresent(l -> builder.put("spiralBlock", l));
 
     getContractSizeLimit().ifPresent(l -> builder.put("contractSizeLimit", l));
     getEvmStackSize().ifPresent(l -> builder.put("evmstacksize", l));
     getEcip1017EraRounds().ifPresent(l -> builder.put("ecip1017EraRounds", l));
+
+    getDepositContractAddress().ifPresent(l -> builder.put("depositContractAddress", l));
 
     if (isClique()) {
       builder.put("clique", getCliqueConfigOptions().asMap());
@@ -500,22 +479,11 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
     if (isEthHash()) {
       builder.put("ethash", getEthashConfigOptions().asMap());
     }
-    if (isKeccak256()) {
-      builder.put("keccak256", getKeccak256ConfigOptions().asMap());
-    }
-    if (isIbftLegacy()) {
-      builder.put("ibft", getIbftLegacyConfigOptions().asMap());
-    }
     if (isIbft2()) {
       builder.put("ibft2", getBftConfigOptions().asMap());
     }
     if (isQbft()) {
       builder.put("qbft", getQbftConfigOptions().asMap());
-    }
-
-    if (isQuorum()) {
-      builder.put("isQuorum", true);
-      getQip714BlockNumber().ifPresent(blockNumber -> builder.put("qip714block", blockNumber));
     }
 
     if (isZeroBaseFee()) {
@@ -596,10 +564,6 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
             getArrowGlacierBlockNumber(),
             getGrayGlacierBlockNumber(),
             getMergeNetSplitBlockNumber(),
-            getShanghaiTime(),
-            getCancunTime(),
-            getFutureEipsTime(),
-            getExperimentalEipsTime(),
             getEcip1015BlockNumber(),
             getDieHardBlockNumber(),
             getGothamBlockNumber(),
@@ -610,7 +574,7 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
             getThanosBlockNumber(),
             getMagnetoBlockNumber(),
             getMystiqueBlockNumber(),
-            getEcip1049BlockNumber());
+            getSpiralBlockNumber());
     // when adding forks add an entry to ${REPO_ROOT}/config/src/test/resources/all_forks.json
 
     return forkBlockNumbers
@@ -623,7 +587,9 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
 
   @Override
   public List<Long> getForkBlockTimestamps() {
-    Stream<OptionalLong> forkBlockTimestamps = Stream.of(getShanghaiTime(), getCancunTime());
+    Stream<OptionalLong> forkBlockTimestamps =
+        Stream.of(
+            getShanghaiTime(), getCancunTime(), getFutureEipsTime(), getExperimentalEipsTime());
     // when adding forks add an entry to ${REPO_ROOT}/config/src/test/resources/all_forks.json
 
     return forkBlockTimestamps

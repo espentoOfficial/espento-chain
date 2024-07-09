@@ -15,17 +15,14 @@
  */
 package org.hyperledger.besu.evmtool;
 
-import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
-
-import picocli.CommandLine;
+import org.hyperledger.besu.util.LogConfigurator;
 
 public final class EvmTool {
 
   public static void main(final String... args) {
-    SignatureAlgorithmFactory.setDefaultInstance();
-
+    LogConfigurator.setLevel("", "DEBUG");
     final EvmToolCommand evmToolCommand = new EvmToolCommand();
 
-    evmToolCommand.parse(new CommandLine.RunLast(), args);
+    evmToolCommand.execute(args);
   }
 }

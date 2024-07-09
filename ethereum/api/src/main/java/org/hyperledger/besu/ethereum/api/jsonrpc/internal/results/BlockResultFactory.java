@@ -16,16 +16,20 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal.results;
 
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.EngineGetPayloadBodiesResultV1.PayloadBody;
 import org.hyperledger.besu.ethereum.api.query.BlockWithMetadata;
 import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.core.Block;
+import org.hyperledger.besu.ethereum.core.BlockBody;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.BlockValueCalculator;
 import org.hyperledger.besu.ethereum.core.BlockWithReceipts;
+import org.hyperledger.besu.ethereum.core.encoding.EncodingContext;
 import org.hyperledger.besu.ethereum.core.encoding.TransactionEncoder;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -92,7 +96,9 @@ public class BlockResultFactory {
   public EngineGetPayloadResultV1 payloadTransactionCompleteV1(final Block block) {
     final List<String> txs =
         block.getBody().getTransactions().stream()
-            .map(TransactionEncoder::encodeOpaqueBytes)
+            .map(
+                transaction ->
+                    TransactionEncoder.encodeOpaqueBytes(transaction, EncodingContext.BLOCK_BODY))
             .map(Bytes::toHexString)
             .collect(Collectors.toList());
 
@@ -103,7 +109,9 @@ public class BlockResultFactory {
       final BlockWithReceipts blockWithReceipts) {
     final List<String> txs =
         blockWithReceipts.getBlock().getBody().getTransactions().stream()
-            .map(TransactionEncoder::encodeOpaqueBytes)
+            .map(
+                transaction ->
+                    TransactionEncoder.encodeOpaqueBytes(transaction, EncodingContext.BLOCK_BODY))
             .map(Bytes::toHexString)
             .collect(Collectors.toList());
 
@@ -113,6 +121,60 @@ public class BlockResultFactory {
         txs,
         blockWithReceipts.getBlock().getBody().getWithdrawals(),
         Quantity.create(blockValue));
+  }
+
+  public EngineGetPayloadBodiesResultV1 payloadBodiesCompleteV1(
+      final List<Optional<BlockBody>> blockBodies) {
+    final List<PayloadBody> payloadBodies =
+        blockBodies.stream()
+            .map(maybeBody -> maybeBody.map(PayloadBody::new).orElse(null))
+            .collect(Collectors.toList());
+    return new EngineGetPayloadBodiesResultV1(payloadBodies);
+  }
+
+  public EngineGetPayloadResultV3 payloadTransactionCompleteV3(
+      final BlockWithReceipts blockWithReceipts) {
+    final List<String> txs =
+        blockWithReceipts.getBlock().getBody().getTransactions().stream()
+            .map(
+                transaction ->
+                    TransactionEncoder.encodeOpaqueBytes(transaction, EncodingContext.BLOCK_BODY))
+            .map(Bytes::toHexString)
+            .collect(Collectors.toList());
+
+    final Wei blockValue = new BlockValueCalculator().calculateBlockValue(blockWithReceipts);
+
+    final BlobsBundleV1 blobsBundleV1 =
+        new BlobsBundleV1(blockWithReceipts.getBlock().getBody().getTransactions());
+    return new EngineGetPayloadResultV3(
+        blockWithReceipts.getHeader(),
+        txs,
+        blockWithReceipts.getBlock().getBody().getWithdrawals(),
+        Quantity.create(blockValue),
+        blobsBundleV1);
+  }
+
+  public EngineGetPayloadResultV6110 payloadTransactionCompleteV6110(
+      final BlockWithReceipts blockWithReceipts) {
+    final List<String> txs =
+        blockWithReceipts.getBlock().getBody().getTransactions().stream()
+            .map(
+                transaction ->
+                    TransactionEncoder.encodeOpaqueBytes(transaction, EncodingContext.BLOCK_BODY))
+            .map(Bytes::toHexString)
+            .collect(Collectors.toList());
+
+    final Wei blockValue = new BlockValueCalculator().calculateBlockValue(blockWithReceipts);
+
+    final BlobsBundleV1 blobsBundleV1 =
+        new BlobsBundleV1(blockWithReceipts.getBlock().getBody().getTransactions());
+    return new EngineGetPayloadResultV6110(
+        blockWithReceipts.getHeader(),
+        txs,
+        blockWithReceipts.getBlock().getBody().getWithdrawals(),
+        blockWithReceipts.getBlock().getBody().getDeposits(),
+        Quantity.create(blockValue),
+        blobsBundleV1);
   }
 
   public BlockResult transactionHash(final BlockWithMetadata<Hash, Hash> blockWithMetadata) {

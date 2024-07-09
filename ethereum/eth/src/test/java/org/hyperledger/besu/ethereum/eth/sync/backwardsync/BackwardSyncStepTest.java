@@ -29,7 +29,6 @@ import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockDataGenerator;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.TransactionReceipt;
-import org.hyperledger.besu.ethereum.eth.manager.DeterministicEthScheduler;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManager;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManagerTestUtil;
@@ -39,20 +38,25 @@ import org.hyperledger.besu.ethereum.mainnet.MainnetBlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.mainnet.MainnetProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.services.kvstore.InMemoryKeyValueStorage;
+import org.hyperledger.besu.testutil.DeterministicEthScheduler;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nonnull;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 public class BackwardSyncStepTest {
 
   public static final int REMOTE_HEIGHT = 50;
@@ -73,8 +77,9 @@ public class BackwardSyncStepTest {
   GenericKeyValueStorageFacade<Hash, BlockHeader> headersStorage;
   GenericKeyValueStorageFacade<Hash, Block> blocksStorage;
   GenericKeyValueStorageFacade<Hash, Hash> chainStorage;
+  GenericKeyValueStorageFacade<String, BlockHeader> sessionDataStorage;
 
-  @Before
+  @BeforeEach
   public void setup() {
     headersStorage =
         new GenericKeyValueStorageFacade<>(
@@ -86,10 +91,14 @@ public class BackwardSyncStepTest {
             Hash::toArrayUnsafe,
             new BlocksConvertor(new MainnetBlockHeaderFunctions()),
             new InMemoryKeyValueStorage());
-
     chainStorage =
         new GenericKeyValueStorageFacade<>(
             Hash::toArrayUnsafe, new HashConvertor(), new InMemoryKeyValueStorage());
+    sessionDataStorage =
+        new GenericKeyValueStorageFacade<>(
+            key -> key.getBytes(StandardCharsets.UTF_8),
+            new BlocksHeadersConvertor(new MainnetBlockHeaderFunctions()),
+            new InMemoryKeyValueStorage());
 
     Block genesisBlock = blockDataGenerator.genesisBlock();
     remoteBlockchain = createInMemoryBlockchain(genesisBlock);
@@ -234,7 +243,7 @@ public class BackwardSyncStepTest {
   @Nonnull
   private BackwardChain createBackwardChain(final int number) {
     final BackwardChain backwardChain =
-        new BackwardChain(headersStorage, blocksStorage, chainStorage);
+        new BackwardChain(headersStorage, blocksStorage, chainStorage, sessionDataStorage);
     backwardChain.appendTrustedBlock(remoteBlockchain.getBlockByNumber(number).orElseThrow());
     return backwardChain;
   }

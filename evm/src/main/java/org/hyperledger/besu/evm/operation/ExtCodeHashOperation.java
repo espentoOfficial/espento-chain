@@ -20,11 +20,11 @@ import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
-import org.hyperledger.besu.evm.internal.FixedStack.OverflowException;
-import org.hyperledger.besu.evm.internal.FixedStack.UnderflowException;
+import org.hyperledger.besu.evm.internal.OverflowException;
+import org.hyperledger.besu.evm.internal.UnderflowException;
 import org.hyperledger.besu.evm.internal.Words;
 
-import org.apache.tuweni.units.bigints.UInt256;
+import org.apache.tuweni.bytes.Bytes;
 
 /** The Ext code hash operation. */
 public class ExtCodeHashOperation extends AbstractOperation {
@@ -63,9 +63,9 @@ public class ExtCodeHashOperation extends AbstractOperation {
       } else {
         final Account account = frame.getWorldUpdater().get(address);
         if (account == null || account.isEmpty()) {
-          frame.pushStackItem(UInt256.ZERO);
+          frame.pushStackItem(Bytes.EMPTY);
         } else {
-          frame.pushStackItem(UInt256.fromBytes(account.getCodeHash()));
+          frame.pushStackItem(account.getCodeHash());
         }
         return new OperationResult(cost, null);
       }

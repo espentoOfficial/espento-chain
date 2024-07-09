@@ -37,15 +37,15 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.apache.tuweni.bytes.Bytes;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class AdminJsonRpcHttpServiceTest extends JsonRpcHttpServiceTestBase {
   private static final Logger LOG = LoggerFactory.getLogger(AdminJsonRpcHttpServiceTest.class);
 
-  @BeforeClass
+  @BeforeAll
   public static void setup() throws Exception {
     initServerAndClient();
   }
@@ -79,7 +79,8 @@ public class AdminJsonRpcHttpServiceTest extends JsonRpcHttpServiceTestBase {
             List.of(),
             EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
             TestClock.fixed(),
-            Collections.emptyList()));
+            Collections.emptyList(),
+            Bytes.random(64)));
     peerList.add(
         new EthPeer(
             MockPeerConnection.create(info2, addr30301, addr60302),
@@ -88,7 +89,8 @@ public class AdminJsonRpcHttpServiceTest extends JsonRpcHttpServiceTestBase {
             List.of(),
             EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
             TestClock.fixed(),
-            Collections.emptyList()));
+            Collections.emptyList(),
+            Bytes.random(64)));
     peerList.add(
         new EthPeer(
             MockPeerConnection.create(info3, addr30301, addr60303),
@@ -97,7 +99,8 @@ public class AdminJsonRpcHttpServiceTest extends JsonRpcHttpServiceTestBase {
             List.of(),
             EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
             TestClock.fixed(),
-            Collections.emptyList()));
+            Collections.emptyList(),
+            Bytes.random(64)));
 
     when(ethPeersMock.streamAllPeers()).thenReturn(peerList.stream());
     when(peerDiscoveryMock.getPeerCount()).thenReturn(peerList.size());

@@ -1,94 +1,72 @@
-## Hyperledger Besu: Step-by-Step Guide to Setting Up a Node
+# Besu Ethereum Client
+ [![CircleCI](https://circleci.com/gh/hyperledger/besu/tree/main.svg?style=svg)](https://circleci.com/gh/hyperledger/besu/tree/main)
+ [![Documentation Status](https://readthedocs.org/projects/hyperledger-besu/badge/?version=latest)](https://besu.hyperledger.org/en/latest/?badge=latest)
+ [![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/3174/badge)](https://bestpractices.coreinfrastructure.org/projects/3174)
+ [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/hyperledger/besu/blob/main/LICENSE)
+ [![Discord](https://img.shields.io/discord/905194001349627914?logo=Hyperledger&style=plastic)](https://discord.gg/hyperledger)
+ [![Twitter Follow](https://img.shields.io/twitter/follow/HyperledgerBesu)](https://twitter.com/HyperledgerBesu)
 
-### Prerequisites
+[Download](https://hyperledger.jfrog.io/artifactory/besu-binaries/besu/)
 
-1. **Java Development Kit (JDK)**: Ensure you have JDK 17 or higher installed.
-2. **Hardware Requirements**: At least 8 GB RAM and 100 GB free disk space.
-3. **Operating System**: Linux, macOS, or Windows.
+Besu is an Apache 2.0 licensed, MainNet compatible, Ethereum client written in Java.
 
-### Step 1: Download Hyperledger Besu Binary
+## Useful Links
 
-1. Go to the [Hyperledger Besu releases page](https://github.com/hyperledger/besu/releases/tag/23.1.0).
-2. Download the latest binary for your operating system:
-   - **Linux/macOS**: `besu-<version>-linux.tar.gz`
+* [Besu User Documentation]
+* [Besu Issues]
+* [Besu Wiki](https://wiki.hyperledger.org/display/BESU/Hyperledger+Besu)
+* [How to Contribute to Besu](https://wiki.hyperledger.org/display/BESU/How+to+Contribute)
+* [Besu Roadmap & Planning](https://wiki.hyperledger.org/pages/viewpage.action?pageId=24781786)
 
-### Step 2: Install Hyperledger Besu
 
-#### For Linux/macOS:
+## Issues 
 
-1. Open a terminal.
-2. Extract the downloaded tarball:
-   ```bash
-   tar -xzf besu-<version>-linux.tar.gz
-   ```
-3. Move the extracted files to your desired directory, for example:
-   ```bash
-   sudo mv besu-<version> /usr/local/bin/besu
-   ```
-4. Add `besu` to your PATH by adding the following line to your `~/.bashrc` or `~/.zshrc` file:
-   ```bash
-   export PATH=$PATH:/usr/local/bin/besu/bin
-   ```
-5. Apply the changes:
-   ```bash
-   source ~/.bashrc
-   ```
+Besu issues are tracked [in the github issues tab][Besu Issues].
+See our [guidelines](https://wiki.hyperledger.org/display/BESU/Issues) for more details on searching and creating issues.
 
-### Step 3: Configure Hyperledger Besu
+If you have any questions, queries or comments, [Besu channel on Hyperledger Discord] is the place to find us.
 
-1. Edit provided configuration file `config.toml`.
 
-### Step 4: Start Hyperledger Besu Node
+## Besu Users
 
-1. Open a terminal (or command prompt on Windows).
-2. Navigate to the directory containing the `config.toml` file.
-3. Start the node:
-   ```bash
-   besu --config-file=config.toml
-   ```
+To install the Besu binary, follow [these instructions](https://besu.hyperledger.org/public-networks/get-started/install/binary-distribution).    
 
-### Step 5: Verify Node Status
+## Besu Developers
 
-1. Open a new terminal or command prompt.
-2. Use `curl` to check if the node is running correctly:
-   ```bash
-   curl -X POST --data '{"jsonrpc":"2.0","method":"net_version","params":[],"id":1}' http://localhost:8545
-   ```
-3. You should receive a JSON response indicating the network ID.
+* [Contributing Guidelines]
+* [Coding Conventions](https://wiki.hyperledger.org/display/BESU/Coding+Conventions)
+* [Command Line Interface (CLI) Style Guide](https://wiki.hyperledger.org/display/BESU/Besu+CLI+Style+Guide)
+* [Besu User Documentation] for running and using Besu
 
-### Step 6: Connect and Sync with the Network
 
-1. **Syncing with Mainnet**: By default, the node will start syncing with the Ethereum mainnet.
-2. **Sync Progress**: Monitor the log output to see the sync progress. The node will download blocks and state until it catches up with the current chain head.
+### Development
 
-### Step 7: Use JSON-RPC API to Interact with the Node
+Instructions for how to get started with developing on the Besu codebase. Please also read the
+[wiki](https://wiki.hyperledger.org/display/BESU/Pull+Requests) for more details on how to submit a pull request (PR).  
 
-1. **Send Requests**: Use tools like `curl`, Postman, or any Ethereum-compatible client to send JSON-RPC requests to your Besu node.
-2. **Example Request**: Fetch the latest block number:
-   ```bash
-   curl -X POST --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:8545
-   ```
-3. **Explore APIs**: Refer to the [Hyperledger Besu JSON-RPC API documentation](https://besu.hyperledger.org/en/stable/Reference/API-Methods/) for more methods you can use.
+* [Checking Out and Building](https://wiki.hyperledger.org/display/BESU/Building+from+source)
+* [Running Developer Builds](https://wiki.hyperledger.org/display/BESU/Building+from+source#running-developer-builds)
+* [Code Coverage](https://wiki.hyperledger.org/display/BESU/Code+coverage)
+* [Logging](https://wiki.hyperledger.org/display/BESU/Logging) or the [Documentation's Logging section](https://besu.hyperledger.org/public-networks/how-to/monitor/logging)
 
-### Step 8: Additional Configuration (Optional)
 
-1. **Enable WebSocket**:
-   ```toml
-   rpc-ws-enabled = true
-   rpc-ws-host = "0.0.0.0"
-   rpc-ws-port = 8546
-   rpc-ws-api = ["ETH", "NET", "WEB3"]
-   ```
+## Release Notes
 
-2. **Enable Metrics**:
-   ```toml
-   metrics-enabled = true
-   metrics-host = "0.0.0.0"
-   metrics-port = 9545
-   ```
+[Release Notes](CHANGELOG.md)
 
-### Conclusion
+## Special thanks
 
-You've successfully set up a Hyperledger Besu node! You can now interact with the Ethereum network using JSON-RPC APIs. Explore more configuration options and features in the [official documentation](https://besu.hyperledger.org/).
+YourKit for providing us with a free profiler open source license. 
 
-For any issues or further assistance, refer to the [Hyperledger Besu documentation](https://besu.hyperledger.org/) and community forums. Happy coding!
+YourKit supports open source projects with innovative and intelligent tools
+for monitoring and profiling Java and .NET applications.
+YourKit is the creator of <a href="https://www.yourkit.com/java/profiler/">YourKit Java Profiler</a>,
+<a href="https://www.yourkit.com/.net/profiler/">YourKit .NET Profiler</a>,
+and <a href="https://www.yourkit.com/youmonitor/">YourKit YouMonitor</a>.
+
+![YourKit Logo](https://www.yourkit.com/images/yklogo.png)
+
+[Besu Issues]: https://github.com/hyperledger/besu/issues
+[Besu User Documentation]: https://besu.hyperledger.org
+[Besu channel on Hyperledger Discord]: https://discord.gg/hyperledger
+[Contributing Guidelines]: CONTRIBUTING.md

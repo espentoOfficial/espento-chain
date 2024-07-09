@@ -1,5 +1,5 @@
 /*
- * Copyright ConsenSys AG.
+ * Copyright contributors to Hyperledger Besu.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -12,21 +12,47 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
+
 package org.hyperledger.besu.ethereum.mainnet;
 
+import org.hyperledger.besu.ethereum.core.BlockHeader;
+import org.hyperledger.besu.ethereum.core.BlockHeaderBuilder;
 import org.hyperledger.besu.ethereum.core.ProcessableBlockHeader;
 
-import java.util.stream.Stream;
+import java.math.BigInteger;
+import java.util.Optional;
+import java.util.function.Predicate;
 
-public interface ProtocolSchedule
-    extends HeaderBasedProtocolSchedule, PrivacySupportingProtocolSchedule {
+public interface ProtocolSchedule extends PrivacySupportingProtocolSchedule {
 
-  ProtocolSpec getByBlockNumber(long number);
+  ProtocolSpec getByBlockHeader(final ProcessableBlockHeader blockHeader);
 
-  Stream<Long> streamMilestoneBlocks();
-
-  @Override
-  default ProtocolSpec getByBlockHeader(final ProcessableBlockHeader blockHeader) {
-    return getByBlockNumber(blockHeader.getNumber());
+  default ProtocolSpec getForNextBlockHeader(
+      final BlockHeader parentBlockHeader, final long timestampForNextBlock) {
+    final BlockHeader nextBlockHeader =
+        BlockHeaderBuilder.fromHeader(parentBlockHeader)
+            .number(parentBlockHeader.getNumber() + 1)
+            .timestamp(timestampForNextBlock)
+            .parentHash(parentBlockHeader.getHash())
+            .blockHeaderFunctions(new MainnetBlockHeaderFunctions())
+            .buildBlockHeader();
+    return getByBlockHeader(nextBlockHeader);
   }
+
+  Optional<BigInteger> getChainId();
+
+  String listMilestones();
+
+  void putBlockNumberMilestone(final long blockNumber, final ProtocolSpec protocolSpec);
+
+  void putTimestampMilestone(final long timestamp, final ProtocolSpec protocolSpec);
+
+  default Optional<ScheduledProtocolSpec.Hardfork> hardforkFor(
+      final Predicate<ScheduledProtocolSpec> predicate) {
+    throw new UnsupportedOperationException("Not implemented");
+  }
+
+  boolean isOnMilestoneBoundary(final BlockHeader blockHeader);
+
+  boolean anyMatch(Predicate<ScheduledProtocolSpec> predicate);
 }

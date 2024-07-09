@@ -18,13 +18,15 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestId;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.JsonRpcMethod;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcUnauthorizedResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.privacy.MultiTenancyValidationException;
 
 import io.opentelemetry.api.trace.Span;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,11 +44,13 @@ public class BaseJsonRpcProcessor implements JsonRpcProcessor {
       return method.response(request);
     } catch (final InvalidJsonRpcParameters e) {
       LOG.debug("Invalid Params for method: {}", method.getName(), e);
-      return new JsonRpcErrorResponse(id, JsonRpcError.INVALID_PARAMS);
+      return new JsonRpcErrorResponse(id, RpcErrorType.INVALID_PARAMS);
     } catch (final MultiTenancyValidationException e) {
-      return new JsonRpcUnauthorizedResponse(id, JsonRpcError.UNAUTHORIZED);
+      return new JsonRpcUnauthorizedResponse(id, RpcErrorType.UNAUTHORIZED);
     } catch (final RuntimeException e) {
-      return new JsonRpcErrorResponse(id, JsonRpcError.INTERNAL_ERROR);
+      final JsonArray params = JsonObject.mapFrom(request.getRequest()).getJsonArray("params");
+      LOG.error(String.format("Error processing method: %s %s", method.getName(), params), e);
+      return new JsonRpcErrorResponse(id, RpcErrorType.INTERNAL_ERROR);
     }
   }
 }

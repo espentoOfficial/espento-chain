@@ -14,6 +14,7 @@
  */
 package org.hyperledger.besu.config;
 
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
 
@@ -37,14 +38,7 @@ public interface GenesisConfigOptions {
   boolean isEthHash();
 
   /**
-   * Is keccak 256 boolean.
-   *
-   * @return the boolean
-   */
-  boolean isKeccak256();
-
-  /**
-   * Is ibft legacy boolean.
+   * Is ibft legacy boolean (NOTE this is a deprecated feature).
    *
    * @return the boolean
    */
@@ -72,12 +66,19 @@ public interface GenesisConfigOptions {
   boolean isClique();
 
   /**
+   * Is a Proof of Authority network.
+   *
+   * @return the boolean
+   */
+  boolean isPoa();
+
+  /**
    * Is consensus migration boolean.
    *
    * @return the boolean
    */
   default boolean isConsensusMigration() {
-    return (isIbft2() || isIbftLegacy()) && isQbft();
+    return isIbft2() && isQbft();
   }
 
   /**
@@ -86,13 +87,6 @@ public interface GenesisConfigOptions {
    * @return the consensus engine
    */
   String getConsensusEngine();
-
-  /**
-   * Gets ibft legacy config options.
-   *
-   * @return the ibft legacy config options
-   */
-  IbftLegacyConfigOptions getIbftLegacyConfigOptions();
 
   /**
    * Gets checkpoint options.
@@ -135,13 +129,6 @@ public interface GenesisConfigOptions {
    * @return the ethash config options
    */
   EthashConfigOptions getEthashConfigOptions();
-
-  /**
-   * Gets keccak 256 config options.
-   *
-   * @return the keccak 256 config options
-   */
-  Keccak256ConfigOptions getKeccak256ConfigOptions();
 
   /**
    * Gets homestead block number.
@@ -433,14 +420,13 @@ public interface GenesisConfigOptions {
   OptionalLong getMystiqueBlockNumber();
 
   /**
-   * Block number to activate ECIP-1049 on Classic networks. Changes the hashing algorithm to
-   * keccak-256.
+   * Block number to activate Spiral on Classic networks.
    *
-   * @return block number of ECIP-1049 fork on Classic networks
+   * @return block number of Spiral fork on Classic networks
    * @see <a
-   *     href="https://ecips.ethereumclassic.org/ECIPs/ecip-1049">https://ecips.ethereumclassic.org/ECIPs/ecip-1049</a>
+   *     href="https://ecips.ethereumclassic.org/ECIPs/ecip-1109">https://ecips.ethereumclassic.org/ECIPs/ecip-1109</a>
    */
-  OptionalLong getEcip1049BlockNumber();
+  OptionalLong getSpiralBlockNumber();
 
   /**
    * Gets chain id.
@@ -490,21 +476,6 @@ public interface GenesisConfigOptions {
   TransitionsConfigOptions getTransitions();
 
   /**
-   * Set Besu in Quorum-compatibility mode
-   *
-   * @return true, if Besu is running on Quorum-compatibility mode, false, otherwise.
-   */
-  boolean isQuorum();
-
-  /**
-   * Block number to activate Quorum Permissioning. This option is used on Quorum-compatibility
-   * mode.
-   *
-   * @return block number to activate Quorum Permissioning
-   */
-  OptionalLong getQip714BlockNumber();
-
-  /**
    * The PoW algorithm associated with the genesis file.
    *
    * @return the PoW algorithm in use.
@@ -525,4 +496,12 @@ public interface GenesisConfigOptions {
    * @return true, if you want the next block to use zero for the base fee.
    */
   boolean isZeroBaseFee();
+
+  /**
+   * The deposit contract address that should be in the logger field in Receipt of Deposit
+   * transaction
+   *
+   * @return the deposit address
+   */
+  Optional<Address> getDepositContractAddress();
 }

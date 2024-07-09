@@ -14,8 +14,8 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal;
 
-import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError.INTERNAL_ERROR;
-import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError.UNKNOWN_BLOCK;
+import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.INTERNAL_ERROR;
+import static org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType.UNKNOWN_BLOCK;
 
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
@@ -69,20 +69,18 @@ public class DebugReplayBlock extends AbstractBlockParameterMethod {
       return new JsonRpcErrorResponse(request.getRequest().getId(), UNKNOWN_BLOCK);
     }
 
+    final Block block = maybeBlock.get();
+
     // rewind to the block before the one we want to replay
     protocolContext.getBlockchain().rewindToBlock(blockNumber - 1);
 
     try {
       // replay block and persist it
       protocolSchedule
-          .getByBlockNumber(blockNumber)
+          .getByBlockHeader(block.getHeader())
           .getBlockValidator()
           .validateAndProcessBlock(
-              protocolContext,
-              maybeBlock.get(),
-              HeaderValidationMode.FULL,
-              HeaderValidationMode.NONE,
-              true);
+              protocolContext, block, HeaderValidationMode.FULL, HeaderValidationMode.NONE, true);
     } catch (Exception e) {
       LOG.error(e.getMessage());
       return new JsonRpcErrorResponse(request.getRequest().getId(), INTERNAL_ERROR);

@@ -18,7 +18,6 @@ import static org.hyperledger.besu.controller.BesuController.DATABASE_PATH;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_BACKGROUND_THREAD_COUNT;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_CACHE_CAPACITY;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_IS_HIGH_SPEC;
-import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_MAX_BACKGROUND_COMPACTIONS;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_MAX_OPEN_FILES;
 
 import org.hyperledger.besu.crypto.KeyPairUtil;
@@ -101,12 +100,14 @@ public class PrivacyNode implements AutoCloseable {
             besuConfig.getName(),
             besuConfig.getDataPath(),
             besuConfig.getMiningParameters(),
+            besuConfig.getTransactionPoolConfiguration(),
             besuConfig.getJsonRpcConfiguration(),
             besuConfig.getEngineRpcConfiguration(),
             besuConfig.getWebSocketConfiguration(),
             besuConfig.getJsonRpcIpcConfiguration(),
             besuConfig.getMetricsConfiguration(),
             besuConfig.getPermissioningConfiguration(),
+            besuConfig.getApiConfiguration(),
             besuConfig.getKeyFilePath(),
             besuConfig.isDevMode(),
             besuConfig.getNetwork(),
@@ -278,7 +279,6 @@ public class PrivacyNode implements AutoCloseable {
                     () ->
                         new RocksDBFactoryConfiguration(
                             DEFAULT_MAX_OPEN_FILES,
-                            DEFAULT_MAX_BACKGROUND_COMPACTIONS,
                             DEFAULT_BACKGROUND_THREAD_COUNT,
                             DEFAULT_CACHE_CAPACITY,
                             DEFAULT_IS_HIGH_SPEC),

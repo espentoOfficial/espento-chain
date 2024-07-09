@@ -14,6 +14,9 @@
  */
 package org.hyperledger.besu.plugin.data;
 
+import org.hyperledger.besu.datatypes.Address;
+import org.hyperledger.besu.datatypes.Quantity;
+
 import org.apache.tuweni.units.bigints.UInt64;
 
 /**
@@ -45,7 +48,7 @@ public interface Withdrawal {
   Address getAddress();
 
   /**
-   * Amount of ether to be withdrawn that be credit to the recipient address
+   * Amount of ether to be withdrawn and credited to the recipient address
    *
    * @return withdrawn ether amount
    */

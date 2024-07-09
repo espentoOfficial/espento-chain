@@ -14,8 +14,6 @@
  */
 package org.hyperledger.besu.ethereum.eth.sync;
 
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.debugLambda;
-
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
@@ -68,11 +66,15 @@ public class ChainHeadTracker implements ConnectCallback {
 
   @Override
   public void onPeerConnected(final EthPeer peer) {
-    LOG.debug("Requesting chain head info from {}", peer);
+    LOG.atDebug()
+        .setMessage("Requesting chain head info from {}...")
+        .addArgument(peer::getShortNodeId)
+        .log();
     GetHeadersFromPeerByHashTask.forSingleHash(
             protocolSchedule,
             ethContext,
             Hash.wrap(peer.chainState().getBestBlock().getHash()),
+            0,
             metricsSystem)
         .assignPeer(peer)
         .run()
@@ -82,13 +84,22 @@ public class ChainHeadTracker implements ConnectCallback {
                 final BlockHeader chainHeadHeader = peerResult.getResult().get(0);
                 peer.chainState().update(chainHeadHeader);
                 trailingPeerLimiter.enforceTrailingPeerLimit();
-                debugLambda(
-                    LOG,
-                    "Retrieved chain head info {} from {}",
-                    () -> chainHeadHeader.getNumber() + " (" + chainHeadHeader.getBlockHash() + ")",
-                    () -> peer);
+                LOG.atDebug()
+                    .setMessage("Retrieved chain head info {} from {}...")
+                    .addArgument(
+                        () ->
+                            chainHeadHeader.getNumber()
+                                + " ("
+                                + chainHeadHeader.getBlockHash()
+                                + ")")
+                    .addArgument(peer::getShortNodeId)
+                    .log();
               } else {
-                LOG.debug("Failed to retrieve chain head info. Disconnecting {}", peer, error);
+                LOG.atDebug()
+                    .setMessage("Failed to retrieve chain head info. Disconnecting {}... {}")
+                    .addArgument(peer::getShortNodeId)
+                    .addArgument(error)
+                    .log();
                 peer.disconnect(DisconnectReason.USELESS_PEER);
               }
             });

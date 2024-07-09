@@ -18,7 +18,6 @@ import static org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_BACKGROUND_THREAD_COUNT;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_CACHE_CAPACITY;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_IS_HIGH_SPEC;
-import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_MAX_BACKGROUND_COMPACTIONS;
 import static org.hyperledger.besu.plugin.services.storage.rocksdb.configuration.RocksDBCLIOptions.DEFAULT_MAX_OPEN_FILES;
 
 import org.hyperledger.besu.datatypes.Hash;
@@ -39,7 +38,7 @@ import org.hyperledger.besu.ethereum.eth.sync.fastsync.worldstate.NodeDataReques
 import org.hyperledger.besu.ethereum.storage.StorageProvider;
 import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueSegmentIdentifier;
 import org.hyperledger.besu.ethereum.storage.keyvalue.KeyValueStorageProviderBuilder;
-import org.hyperledger.besu.ethereum.worldstate.DataStorageFormat;
+import org.hyperledger.besu.ethereum.worldstate.DataStorageConfiguration;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage;
 import org.hyperledger.besu.metrics.ObservableMetricsSystem;
@@ -106,7 +105,8 @@ public class WorldStateDownloaderBenchmark {
 
     final StorageProvider storageProvider =
         createKeyValueStorageProvider(tempDir, tempDir.resolve("database"));
-    worldStateStorage = storageProvider.createWorldStateStorage(DataStorageFormat.FOREST);
+    worldStateStorage =
+        storageProvider.createWorldStateStorage(DataStorageConfiguration.DEFAULT_CONFIG);
 
     pendingRequests = new InMemoryTasksPriorityQueues<>();
     worldStateDownloader =
@@ -166,7 +166,6 @@ public class WorldStateDownloaderBenchmark {
                 () ->
                     new RocksDBFactoryConfiguration(
                         DEFAULT_MAX_OPEN_FILES,
-                        DEFAULT_MAX_BACKGROUND_COMPACTIONS,
                         DEFAULT_BACKGROUND_THREAD_COUNT,
                         DEFAULT_CACHE_CAPACITY,
                         DEFAULT_IS_HIGH_SPEC),

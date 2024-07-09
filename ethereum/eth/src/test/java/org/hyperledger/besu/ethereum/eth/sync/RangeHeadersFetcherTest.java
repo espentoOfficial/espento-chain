@@ -40,13 +40,13 @@ import org.hyperledger.besu.plugin.services.MetricsSystem;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class RangeHeadersFetcherTest {
 
   private static final int SEGMENT_SIZE = 5;
@@ -59,7 +59,7 @@ public class RangeHeadersFetcherTest {
   private Responder responder;
   private RespondingEthPeer respondingPeer;
 
-  @BeforeClass
+  @BeforeAll
   public static void setUpClass() {
     final BlockchainSetupUtil blockchainSetupUtil =
         BlockchainSetupUtil.forTesting(DataStorageFormat.FOREST);
@@ -70,10 +70,11 @@ public class RangeHeadersFetcherTest {
     protocolContext = blockchainSetupUtil.getProtocolContext();
   }
 
-  @Before
+  @BeforeEach
   public void setUpTest() {
     ethProtocolManager =
         EthProtocolManagerTestUtil.create(
+            protocolSchedule,
             blockchain,
             () -> false,
             protocolContext.getWorldStateArchive(),

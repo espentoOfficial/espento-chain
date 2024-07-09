@@ -39,6 +39,7 @@ public class RetryingGetHeadersEndingAtFromPeerByHashTask
 
   private final Hash referenceHash;
   private final ProtocolSchedule protocolSchedule;
+  private final long minimumRequiredBlockNumber;
   private final int count;
 
   @VisibleForTesting
@@ -46,11 +47,13 @@ public class RetryingGetHeadersEndingAtFromPeerByHashTask
       final ProtocolSchedule protocolSchedule,
       final EthContext ethContext,
       final Hash referenceHash,
+      final long minimumRequiredBlockNumber,
       final int count,
       final MetricsSystem metricsSystem,
       final int maxRetries) {
     super(ethContext, metricsSystem, List::isEmpty, maxRetries);
     this.protocolSchedule = protocolSchedule;
+    this.minimumRequiredBlockNumber = minimumRequiredBlockNumber;
     this.count = count;
     checkNotNull(referenceHash);
     this.referenceHash = referenceHash;
@@ -60,11 +63,18 @@ public class RetryingGetHeadersEndingAtFromPeerByHashTask
       final ProtocolSchedule protocolSchedule,
       final EthContext ethContext,
       final Hash referenceHash,
+      final long minimumRequiredBlockNumber,
       final int count,
       final MetricsSystem metricsSystem,
       final int maxRetries) {
     return new RetryingGetHeadersEndingAtFromPeerByHashTask(
-        protocolSchedule, ethContext, referenceHash, count, metricsSystem, maxRetries);
+        protocolSchedule,
+        ethContext,
+        referenceHash,
+        minimumRequiredBlockNumber,
+        count,
+        metricsSystem,
+        maxRetries);
   }
 
   @Override
@@ -72,13 +82,18 @@ public class RetryingGetHeadersEndingAtFromPeerByHashTask
       final EthPeer currentPeer) {
     final AbstractGetHeadersFromPeerTask task =
         GetHeadersFromPeerByHashTask.endingAtHash(
-            protocolSchedule, getEthContext(), referenceHash, count, getMetricsSystem());
+            protocolSchedule,
+            getEthContext(),
+            referenceHash,
+            minimumRequiredBlockNumber,
+            count,
+            getMetricsSystem());
     task.assignPeer(currentPeer);
     return executeSubTask(task::run)
         .thenApply(
             peerResult -> {
-              LOG.debug(
-                  "Get {} block headers by hash {} from peer {} has result {}",
+              LOG.trace(
+                  "Got {} block headers by hash {} from peer {} has result {}",
                   count,
                   referenceHash,
                   currentPeer,

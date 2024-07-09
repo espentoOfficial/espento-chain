@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 import org.apache.tuweni.bytes.Bytes;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class RequestManagerTest {
 
@@ -308,7 +308,8 @@ public class RequestManagerTest {
         Collections.emptyList(),
         EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
         TestClock.fixed(),
-        Collections.emptyList());
+        Collections.emptyList(),
+        Bytes.random(64));
   }
 
   @Test

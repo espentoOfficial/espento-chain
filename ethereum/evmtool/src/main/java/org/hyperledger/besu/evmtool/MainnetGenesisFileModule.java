@@ -17,14 +17,15 @@ package org.hyperledger.besu.evmtool;
 
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.config.StubGenesisConfigOptions;
+import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
+import org.hyperledger.besu.crypto.SignatureAlgorithmType;
 import org.hyperledger.besu.ethereum.core.BlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
-import org.hyperledger.besu.ethereum.mainnet.HeaderBasedProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.MainnetBlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.mainnet.MainnetProtocolSchedule;
+import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolScheduleBuilder;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpecAdapters;
-import org.hyperledger.besu.ethereum.mainnet.TimestampScheduleBuilder;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
 
 import java.math.BigInteger;
@@ -33,6 +34,8 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import javax.inject.Named;
+
+import picocli.CommandLine;
 
 class MainnetGenesisFileModule extends GenesisFileModule {
 
@@ -46,10 +49,24 @@ class MainnetGenesisFileModule extends GenesisFileModule {
   }
 
   @Override
-  HeaderBasedProtocolSchedule provideProtocolSchedule(
+  ProtocolSchedule provideProtocolSchedule(
       final GenesisConfigOptions configOptions,
       @Named("Fork") final Optional<String> fork,
-      @Named("RevertReasonEnabled") final boolean revertReasonEnabled) {
+      @Named("RevertReasonEnabled") final boolean revertReasonEnabled,
+      final EvmConfiguration evmConfiguration) {
+
+    final Optional<String> ecCurve = configOptions.getEcCurve();
+    if (ecCurve.isEmpty()) {
+      SignatureAlgorithmFactory.setDefaultInstance();
+    } else {
+      try {
+        SignatureAlgorithmFactory.setInstance(SignatureAlgorithmType.create(ecCurve.get()));
+      } catch (final IllegalArgumentException e) {
+        throw new CommandLine.InitializationException(
+            "Invalid genesis file configuration for ecCurve. " + e.getMessage());
+      }
+    }
+
     if (fork.isPresent()) {
       var schedules = createSchedules();
       var schedule = schedules.get(fork.map(String::toLowerCase).get());
@@ -57,10 +74,10 @@ class MainnetGenesisFileModule extends GenesisFileModule {
         return schedule.get();
       }
     }
-    return MainnetProtocolSchedule.fromConfig(configOptions, EvmConfiguration.DEFAULT);
+    return MainnetProtocolSchedule.fromConfig(configOptions, evmConfiguration);
   }
 
-  public static Map<String, Supplier<HeaderBasedProtocolSchedule>> createSchedules() {
+  public static Map<String, Supplier<ProtocolSchedule>> createSchedules() {
     return Map.ofEntries(
         Map.entry("frontier", createSchedule(new StubGenesisConfigOptions())),
         Map.entry("homestead", createSchedule(new StubGenesisConfigOptions().homesteadBlock(0))),
@@ -90,24 +107,20 @@ class MainnetGenesisFileModule extends GenesisFileModule {
                 new StubGenesisConfigOptions().mergeNetSplitBlock(0).baseFeePerGas(0x0a))),
         Map.entry(
             "shanghai",
-            createTimestampSchedule(
-                new StubGenesisConfigOptions().shanghaiTime(0).baseFeePerGas(0x0a))),
+            createSchedule(new StubGenesisConfigOptions().shanghaiTime(0).baseFeePerGas(0x0a))),
         Map.entry(
             "cancun",
-            createTimestampSchedule(
-                new StubGenesisConfigOptions().cancunTime(0).baseFeePerGas(0x0a))),
+            createSchedule(new StubGenesisConfigOptions().cancunTime(0).baseFeePerGas(0x0a))),
         Map.entry(
             "futureeips",
-            createTimestampSchedule(
-                new StubGenesisConfigOptions().futureEipsTime(0).baseFeePerGas(0x0a))),
+            createSchedule(new StubGenesisConfigOptions().futureEipsTime(0).baseFeePerGas(0x0a))),
         Map.entry(
             "experimentaleips",
-            createTimestampSchedule(
+            createSchedule(
                 new StubGenesisConfigOptions().experimentalEipsTime(0).baseFeePerGas(0x0a))));
   }
 
-  private static Supplier<HeaderBasedProtocolSchedule> createSchedule(
-      final GenesisConfigOptions options) {
+  private static Supplier<ProtocolSchedule> createSchedule(final GenesisConfigOptions options) {
     return () ->
         new ProtocolScheduleBuilder(
                 options,
@@ -115,22 +128,7 @@ class MainnetGenesisFileModule extends GenesisFileModule {
                 ProtocolSpecAdapters.create(0, Function.identity()),
                 PrivacyParameters.DEFAULT,
                 false,
-                options.isQuorum(),
                 EvmConfiguration.DEFAULT)
             .createProtocolSchedule();
-  }
-
-  private static Supplier<HeaderBasedProtocolSchedule> createTimestampSchedule(
-      final GenesisConfigOptions options) {
-    return () ->
-        new TimestampScheduleBuilder(
-                options,
-                options.getChainId().orElse(BigInteger.ONE),
-                ProtocolSpecAdapters.create(0, Function.identity()),
-                PrivacyParameters.DEFAULT,
-                false,
-                options.isQuorum(),
-                EvmConfiguration.DEFAULT)
-            .createTimestampSchedule();
   }
 }

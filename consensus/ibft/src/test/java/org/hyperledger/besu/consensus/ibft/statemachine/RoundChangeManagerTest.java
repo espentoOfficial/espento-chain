@@ -33,8 +33,8 @@ import org.hyperledger.besu.consensus.ibft.validation.ProposalBlockConsistencyVa
 import org.hyperledger.besu.consensus.ibft.validation.RoundChangeMessageValidator;
 import org.hyperledger.besu.consensus.ibft.validation.RoundChangePayloadValidator;
 import org.hyperledger.besu.consensus.ibft.validation.SignedDataValidator;
-import org.hyperledger.besu.crypto.NodeKey;
-import org.hyperledger.besu.crypto.NodeKeyUtils;
+import org.hyperledger.besu.cryptoservices.NodeKey;
+import org.hyperledger.besu.cryptoservices.NodeKeyUtils;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.Util;
@@ -46,8 +46,8 @@ import java.util.stream.Collectors;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class RoundChangeManagerTest {
 
@@ -67,7 +67,7 @@ public class RoundChangeManagerTest {
   private final BftBlockInterface bftBlockInterface =
       new BftBlockInterface(new IbftExtraDataCodec());
 
-  @Before
+  @BeforeEach
   public void setup() {
 
     validators.add(Util.publicKeyToAddress(proposerKey.getPublicKey()));

@@ -16,7 +16,7 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -42,7 +42,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 @SuppressWarnings("unchecked")
 public class DebugGetBadBlockTest {
@@ -95,9 +95,8 @@ public class DebugGetBadBlockTest {
 
     badBlockManager.addBadBlock(badBlockWithTransaction, Optional.empty());
     badBlockManager.addBadBlock(badBlockWoTransaction, Optional.empty());
-
     final ProtocolSpec protocolSpec = mock(ProtocolSpec.class);
-    when(protocolSchedule.getByBlockNumber(anyLong())).thenReturn(protocolSpec);
+    when(protocolSchedule.getByBlockHeader(any())).thenReturn(protocolSpec);
     when(protocolSpec.getBadBlocksManager()).thenReturn(badBlockManager);
 
     final JsonRpcRequestContext request =
@@ -125,7 +124,8 @@ public class DebugGetBadBlockTest {
   @Test
   public void shouldReturnCorrectResponseWhenNoInvalidBlockFound() {
     final ProtocolSpec protocolSpec = mock(ProtocolSpec.class);
-    when(protocolSchedule.getByBlockNumber(anyLong())).thenReturn(protocolSpec);
+
+    when(protocolSchedule.getByBlockHeader(any())).thenReturn(protocolSpec);
     when(protocolSpec.getBadBlocksManager()).thenReturn(badBlockManager);
 
     final JsonRpcRequestContext request =

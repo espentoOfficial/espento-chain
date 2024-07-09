@@ -55,6 +55,9 @@ public class BlockUtils {
         new BigInteger(block.getNonceRaw().substring(2), 16).longValue(),
         null,
         null,
+        null,
+        null,
+        null,
         blockHeaderFunctions);
   }
 }

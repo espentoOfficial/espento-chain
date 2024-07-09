@@ -18,6 +18,7 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -26,10 +27,11 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.BlockTrace;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.BlockTracer;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.Tracer;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTrace;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockWithMetadata;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Block;
@@ -42,10 +44,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.OptionalLong;
+import java.util.function.Function;
 
 import org.apache.tuweni.bytes.Bytes;
-import org.junit.Test;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.Test;
 
 public class DebugTraceBlockTest {
 
@@ -117,7 +119,8 @@ public class DebugTraceBlockTest {
     when(transaction2Trace.getResult()).thenReturn(transaction2Result);
     when(transaction1Result.getOutput()).thenReturn(Bytes.fromHexString("1234"));
     when(transaction2Result.getOutput()).thenReturn(Bytes.fromHexString("1234"));
-    when(blockTracer.trace(Mockito.eq(block), any())).thenReturn(Optional.of(blockTrace));
+    when(blockTracer.trace(any(Tracer.TraceableState.class), eq(block), any()))
+        .thenReturn(Optional.of(blockTrace));
 
     when(blockchainQueries.blockByHash(parentBlock.getHash()))
         .thenReturn(
@@ -128,6 +131,13 @@ public class DebugTraceBlockTest {
                     Collections.emptyList(),
                     parentBlock.getHeader().getDifficulty(),
                     parentBlock.calculateSize())));
+    when(blockchainQueries.getAndMapWorldState(eq(parentBlock.getHash()), any()))
+        .thenAnswer(
+            invocationOnMock -> {
+              Function<Tracer.TraceableState, ? extends Optional<BlockTracer>> mapper =
+                  invocationOnMock.getArgument(1);
+              return mapper.apply(mock(Tracer.TraceableState.class));
+            });
 
     final JsonRpcSuccessResponse response =
         (JsonRpcSuccessResponse) debugTraceBlock.response(request);
@@ -150,6 +160,6 @@ public class DebugTraceBlockTest {
     when(blockchainQueries.blockByHash(any())).thenReturn(Optional.empty());
 
     final JsonRpcErrorResponse response = (JsonRpcErrorResponse) debugTraceBlock.response(request);
-    assertThat(response.getError()).isEqualByComparingTo(JsonRpcError.PARENT_BLOCK_NOT_FOUND);
+    assertThat(response.getErrorType()).isEqualByComparingTo(RpcErrorType.PARENT_BLOCK_NOT_FOUND);
   }
 }

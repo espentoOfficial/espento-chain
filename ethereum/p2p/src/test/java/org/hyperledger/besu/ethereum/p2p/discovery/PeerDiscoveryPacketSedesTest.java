@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.data.Offset.offset;
 
-import org.hyperledger.besu.crypto.NodeKey;
-import org.hyperledger.besu.crypto.NodeKeyUtils;
+import org.hyperledger.besu.cryptoservices.NodeKey;
+import org.hyperledger.besu.cryptoservices.NodeKeyUtils;
 import org.hyperledger.besu.ethereum.p2p.discovery.internal.FindNeighborsPacketData;
 import org.hyperledger.besu.ethereum.p2p.discovery.internal.NeighborsPacketData;
 import org.hyperledger.besu.ethereum.p2p.discovery.internal.Packet;
@@ -35,7 +35,7 @@ import java.util.Random;
 import io.vertx.core.buffer.Buffer;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.MutableBytes;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class PeerDiscoveryPacketSedesTest {
   private final PeerDiscoveryTestHelper helper = new PeerDiscoveryTestHelper();

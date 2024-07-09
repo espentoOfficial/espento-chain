@@ -22,7 +22,6 @@ import static org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver.EMP
 import static org.hyperledger.besu.ethereum.privacy.storage.PrivateStateKeyValueStorage.SCHEMA_VERSION_1_0_0;
 import static org.hyperledger.besu.ethereum.privacy.storage.PrivateStateKeyValueStorage.SCHEMA_VERSION_1_4_0;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
@@ -32,6 +31,7 @@ import static org.mockito.Mockito.when;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
+import org.hyperledger.besu.datatypes.TransactionType;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.Block;
@@ -52,7 +52,6 @@ import org.hyperledger.besu.ethereum.privacy.storage.PrivateStateKeyValueStorage
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateStateStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateTransactionMetadata;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
-import org.hyperledger.besu.plugin.data.TransactionType;
 import org.hyperledger.besu.plugin.services.storage.KeyValueStorage;
 import org.hyperledger.besu.services.kvstore.InMemoryKeyValueStorage;
 
@@ -65,14 +64,17 @@ import java.util.Optional;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class PrivateStorageMigrationTest {
 
@@ -96,14 +98,14 @@ public class PrivateStorageMigrationTest {
   private PrivateStateRootResolver privateStateRootResolver;
   private PrivateStorageMigration migration;
 
-  @Before
+  @BeforeEach
   public void setUp() {
     final KeyValueStorage kvStorage = new InMemoryKeyValueStorage();
 
     privateStateStorage = new PrivateStateKeyValueStorage(kvStorage);
     privateStateRootResolver = new PrivateStateRootResolver(privateStateStorage);
 
-    lenient().when(protocolSchedule.getByBlockNumber(anyLong())).thenReturn(protocolSpec);
+    lenient().when(protocolSchedule.getByBlockHeader(any())).thenReturn(protocolSpec);
     lenient().when(protocolSpec.getTransactionProcessor()).thenReturn(transactionProcessor);
     lenient()
         .when(protocolSpec.getTransactionReceiptFactory())

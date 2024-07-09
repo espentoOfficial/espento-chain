@@ -16,9 +16,15 @@ package org.hyperledger.besu.ethereum;
 
 public interface GasLimitCalculator {
 
+  static final long BLOB_GAS_LIMIT = 786432;
+
   long nextGasLimit(long currentGasLimit, long targetGasLimit, long newBlockNumber);
 
   static GasLimitCalculator constant() {
     return (currentGasLimit, targetGasLimit, newBlockNumber) -> currentGasLimit;
+  }
+
+  default long currentBlobGasLimit() {
+    return BLOB_GAS_LIMIT;
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright contributors to Hyperledger Besu
+ * Copyright Hyperledger Besu Contributors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -17,7 +17,7 @@ package org.hyperledger.besu.ethereum.eth.sync.snapsync;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.trie.InnerNodeDiscoveryManager;
 import org.hyperledger.besu.ethereum.trie.MerkleTrieException;
-import org.hyperledger.besu.ethereum.trie.StoredMerklePatriciaTrie;
+import org.hyperledger.besu.ethereum.trie.patricia.StoredMerklePatriciaTrie;
 
 import java.math.BigInteger;
 import java.util.HashMap;
@@ -41,6 +41,17 @@ public class RangeManager {
       Hash.fromHexString("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
   private RangeManager() {}
+
+  public static int getRangeCount(
+      final Bytes32 min, final Bytes32 max, final TreeMap<Bytes32, Bytes> items) {
+    if (min.equals(MIN_RANGE) && max.equals(MAX_RANGE)) {
+      return MAX_RANGE
+          .toUnsignedBigInteger()
+          .divide(items.lastKey().toUnsignedBigInteger().subtract(min.toUnsignedBigInteger()))
+          .intValue();
+    }
+    return 1;
+  }
 
   public static Map<Bytes32, Bytes32> generateAllRanges(final int sizeRange) {
     if (sizeRange == 1) {
@@ -75,6 +86,9 @@ public class RangeManager {
       final BigInteger min, final BigInteger max, final int nbRange) {
     final BigInteger rangeSize = max.subtract(min).divide(BigInteger.valueOf(nbRange));
     final TreeMap<Bytes32, Bytes32> ranges = new TreeMap<>();
+    if (min.compareTo(max) > 0) {
+      return ranges;
+    }
     if (min.equals(max) || nbRange == 1) {
       ranges.put(format(min), format(max));
       return ranges;

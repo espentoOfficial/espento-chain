@@ -24,6 +24,7 @@ import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.BlockWithReceipts;
 import org.hyperledger.besu.ethereum.core.BlockchainSetupUtil;
+import org.hyperledger.besu.ethereum.core.ProtocolScheduleFixture;
 import org.hyperledger.besu.ethereum.core.TransactionReceipt;
 import org.hyperledger.besu.ethereum.eth.EthProtocolConfiguration;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManager;
@@ -36,9 +37,9 @@ import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class DownloadReceiptsStepTest {
 
@@ -48,7 +49,7 @@ public class DownloadReceiptsStepTest {
   private EthProtocolManager ethProtocolManager;
   private DownloadReceiptsStep downloadReceiptsStep;
 
-  @BeforeClass
+  @BeforeAll
   public static void setUpClass() {
     final BlockchainSetupUtil setupUtil = BlockchainSetupUtil.forTesting(DataStorageFormat.FOREST);
     setupUtil.importFirstBlocks(20);
@@ -56,11 +57,12 @@ public class DownloadReceiptsStepTest {
     blockchain = setupUtil.getBlockchain();
   }
 
-  @Before
+  @BeforeEach
   public void setUp() {
     TransactionPool transactionPool = mock(TransactionPool.class);
     ethProtocolManager =
         EthProtocolManagerTestUtil.create(
+            ProtocolScheduleFixture.MAINNET,
             blockchain,
             () -> false,
             protocolContext.getWorldStateArchive(),

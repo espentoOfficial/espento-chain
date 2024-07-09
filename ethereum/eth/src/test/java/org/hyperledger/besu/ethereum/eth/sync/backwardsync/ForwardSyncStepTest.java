@@ -38,9 +38,10 @@ import org.hyperledger.besu.ethereum.eth.manager.RespondingEthPeer;
 import org.hyperledger.besu.ethereum.mainnet.MainnetBlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.mainnet.MainnetProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
-import org.hyperledger.besu.ethereum.referencetests.ReferenceTestWorldState;
+import org.hyperledger.besu.ethereum.referencetests.DefaultReferenceTestWorldState;
 import org.hyperledger.besu.services.kvstore.InMemoryKeyValueStorage;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -48,14 +49,17 @@ import java.util.concurrent.CompletableFuture;
 import javax.annotation.Nonnull;
 
 import org.assertj.core.api.Assertions;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 public class ForwardSyncStepTest {
 
   public static final int REMOTE_HEIGHT = 50;
@@ -73,10 +77,10 @@ public class ForwardSyncStepTest {
   private MutableBlockchain localBlockchain;
   GenericKeyValueStorageFacade<Hash, BlockHeader> headersStorage;
   GenericKeyValueStorageFacade<Hash, Block> blocksStorage;
-
   GenericKeyValueStorageFacade<Hash, Hash> chainStorage;
+  GenericKeyValueStorageFacade<String, BlockHeader> sessionDataStorage;
 
-  @Before
+  @BeforeEach
   public void setup() {
     headersStorage =
         new GenericKeyValueStorageFacade<>(
@@ -91,6 +95,11 @@ public class ForwardSyncStepTest {
     chainStorage =
         new GenericKeyValueStorageFacade<>(
             Hash::toArrayUnsafe, new HashConvertor(), new InMemoryKeyValueStorage());
+    sessionDataStorage =
+        new GenericKeyValueStorageFacade<>(
+            key -> key.getBytes(StandardCharsets.UTF_8),
+            new BlocksHeadersConvertor(new MainnetBlockHeaderFunctions()),
+            new InMemoryKeyValueStorage());
 
     Block genesisBlock = blockDataGenerator.genesisBlock();
     remoteBlockchain = createInMemoryBlockchain(genesisBlock);
@@ -129,7 +138,8 @@ public class ForwardSyncStepTest {
               return new BlockProcessingResult(
                   Optional.of(
                       new BlockProcessingOutputs(
-                          new ReferenceTestWorldState(), blockDataGenerator.receipts(block))));
+                          DefaultReferenceTestWorldState.create(Collections.emptyMap()),
+                          blockDataGenerator.receipts(block))));
             });
   }
 
@@ -197,7 +207,7 @@ public class ForwardSyncStepTest {
   @Nonnull
   private BackwardChain backwardChainFromBlock(final int number) {
     final BackwardChain backwardChain =
-        new BackwardChain(headersStorage, blocksStorage, chainStorage);
+        new BackwardChain(headersStorage, blocksStorage, chainStorage, sessionDataStorage);
     backwardChain.appendTrustedBlock(remoteBlockchain.getBlockByNumber(number).orElseThrow());
     return backwardChain;
   }

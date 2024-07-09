@@ -14,8 +14,6 @@
  */
 package org.hyperledger.besu.ethereum.eth.sync.fastsync;
 
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.debugLambda;
-
 import org.hyperledger.besu.config.GenesisConfigOptions;
 import org.hyperledger.besu.consensus.merge.ForkchoiceEvent;
 import org.hyperledger.besu.datatypes.Hash;
@@ -46,6 +44,8 @@ public class PivotSelectorFromSafeBlock implements PivotBlockSelector {
   private final Supplier<Optional<ForkchoiceEvent>> forkchoiceStateSupplier;
   private final Runnable cleanupAction;
 
+  private long lastNoFcuReceivedInfoLog = System.currentTimeMillis();
+  private static final long NO_FCU_RECEIVED_LOGGING_THRESHOLD = 60000L;
   private volatile Optional<BlockHeader> maybeCachedHeadBlockHeader = Optional.empty();
 
   public PivotSelectorFromSafeBlock(
@@ -70,6 +70,11 @@ public class PivotSelectorFromSafeBlock implements PivotBlockSelector {
     final Optional<ForkchoiceEvent> maybeForkchoice = forkchoiceStateSupplier.get();
     if (maybeForkchoice.isPresent() && maybeForkchoice.get().hasValidSafeBlockHash()) {
       return Optional.of(selectLastSafeBlockAsPivot(maybeForkchoice.get().getSafeBlockHash()));
+    }
+    if (lastNoFcuReceivedInfoLog + NO_FCU_RECEIVED_LOGGING_THRESHOLD < System.currentTimeMillis()) {
+      lastNoFcuReceivedInfoLog = System.currentTimeMillis();
+      LOG.info(
+          "Waiting for consensus client, this may be because your consensus client is still syncing");
     }
     LOG.debug("No finalized block hash announced yet");
     return Optional.empty();
@@ -137,17 +142,17 @@ public class PivotSelectorFromSafeBlock implements PivotBlockSelector {
 
   private CompletableFuture<BlockHeader> downloadBlockHeader(final Hash hash) {
     return RetryingGetHeaderFromPeerByHashTask.byHash(
-            protocolSchedule, ethContext, hash, metricsSystem)
+            protocolSchedule, ethContext, hash, 0, metricsSystem)
         .getHeader()
         .whenComplete(
             (blockHeader, throwable) -> {
               if (throwable != null) {
                 LOG.debug("Error downloading block header by hash {}", hash);
               } else {
-                debugLambda(
-                    LOG,
-                    "Successfully downloaded pivot block header by hash {}",
-                    blockHeader::toLogString);
+                LOG.atDebug()
+                    .setMessage("Successfully downloaded pivot block header by hash {}")
+                    .addArgument(blockHeader::toLogString)
+                    .log();
               }
             });
   }

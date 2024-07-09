@@ -15,6 +15,9 @@
 package org.hyperledger.besu.cli;
 
 import org.hyperledger.besu.BesuInfo;
+import org.hyperledger.besu.ethereum.eth.transactions.TransactionPoolConfiguration;
+import org.hyperledger.besu.evm.internal.EvmConfiguration;
+import org.hyperledger.besu.services.BesuPluginContextImpl;
 import org.hyperledger.besu.util.log.FramedLogMessage;
 import org.hyperledger.besu.util.platform.PlatformDetector;
 
@@ -22,23 +25,46 @@ import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
+import org.slf4j.Logger;
 import oshi.PlatformEnum;
 import oshi.SystemInfo;
 import oshi.hardware.HardwareAbstractionLayer;
 
 /** The Configuration overview builder. */
 public class ConfigurationOverviewBuilder {
+  @SuppressWarnings("PrivateStaticFinalLoggers")
+  private final Logger logger;
+
   private String network;
   private BigInteger networkId;
   private boolean hasCustomGenesis;
+  private String customGenesisFileName;
   private String dataStorage;
   private String syncMode;
   private Integer rpcPort;
   private Collection<String> rpcHttpApis;
   private Integer enginePort;
   private Collection<String> engineApis;
+  private String engineJwtFilePath;
   private boolean isHighSpec = false;
+  private boolean isTrieLogPruningEnabled = false;
+  private long trieLogRetentionThreshold = 0;
+  private Integer trieLogPruningLimit = null;
+  private TransactionPoolConfiguration.Implementation txPoolImplementation;
+  private EvmConfiguration.WorldUpdaterMode worldStateUpdateMode;
+  private Map<String, String> environment;
+  private BesuPluginContextImpl besuPluginContext;
+
+  /**
+   * @param logger the logger
+   */
+  public ConfigurationOverviewBuilder(final Logger logger) {
+    this.logger = logger;
+  }
 
   /**
    * Sets network.
@@ -74,10 +100,21 @@ public class ConfigurationOverviewBuilder {
   }
 
   /**
+   * Sets location of custom genesis file specified.
+   *
+   * @param customGenesisFileName the filename of the custom genesis file, only set if specified
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setCustomGenesis(final String customGenesisFileName) {
+    this.customGenesisFileName = customGenesisFileName;
+    return this;
+  }
+
+  /**
    * Sets data storage.
    *
    * @param dataStorage the data storage
-   * @return the data storage
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setDataStorage(final String dataStorage) {
     this.dataStorage = dataStorage;
@@ -88,7 +125,7 @@ public class ConfigurationOverviewBuilder {
    * Sets sync mode.
    *
    * @param syncMode the sync mode
-   * @return the sync mode
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setSyncMode(final String syncMode) {
     this.syncMode = syncMode;
@@ -99,7 +136,7 @@ public class ConfigurationOverviewBuilder {
    * Sets rpc port.
    *
    * @param rpcPort the rpc port
-   * @return the rpc port
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setRpcPort(final Integer rpcPort) {
     this.rpcPort = rpcPort;
@@ -110,7 +147,7 @@ public class ConfigurationOverviewBuilder {
    * Sets rpc http apis.
    *
    * @param rpcHttpApis the rpc http apis
-   * @return the rpc http apis
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setRpcHttpApis(final Collection<String> rpcHttpApis) {
     this.rpcHttpApis = rpcHttpApis;
@@ -121,7 +158,7 @@ public class ConfigurationOverviewBuilder {
    * Sets engine port.
    *
    * @param enginePort the engine port
-   * @return the engine port
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setEnginePort(final Integer enginePort) {
     this.enginePort = enginePort;
@@ -132,7 +169,7 @@ public class ConfigurationOverviewBuilder {
    * Sets engine apis.
    *
    * @param engineApis the engine apis
-   * @return the engine apis
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setEngineApis(final Collection<String> engineApis) {
     this.engineApis = engineApis;
@@ -142,10 +179,88 @@ public class ConfigurationOverviewBuilder {
   /**
    * Sets high spec enabled.
    *
-   * @return the high spec enabled
+   * @return the builder
    */
   public ConfigurationOverviewBuilder setHighSpecEnabled() {
     isHighSpec = true;
+    return this;
+  }
+
+  /**
+   * Sets trie log pruning enabled
+   *
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setTrieLogPruningEnabled() {
+    isTrieLogPruningEnabled = true;
+    return this;
+  }
+
+  /**
+   * Sets trie log retention threshold
+   *
+   * @param threshold the number of blocks to retain trie logs for
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setTrieLogRetentionThreshold(final long threshold) {
+    trieLogRetentionThreshold = threshold;
+    return this;
+  }
+
+  /**
+   * Sets trie log pruning limit
+   *
+   * @param limit the max number of blocks to load and prune trie logs for at startup
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setTrieLogPruningLimit(final int limit) {
+    trieLogPruningLimit = limit;
+    return this;
+  }
+
+  /**
+   * Sets the txpool implementation in use.
+   *
+   * @param implementation the txpool implementation
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setTxPoolImplementation(
+      final TransactionPoolConfiguration.Implementation implementation) {
+    txPoolImplementation = implementation;
+    return this;
+  }
+
+  /**
+   * Sets the world state updater mode
+   *
+   * @param worldStateUpdateMode the world state updater mode
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setWorldStateUpdateMode(
+      final EvmConfiguration.WorldUpdaterMode worldStateUpdateMode) {
+    this.worldStateUpdateMode = worldStateUpdateMode;
+    return this;
+  }
+
+  /**
+   * Sets the engine jwt file path.
+   *
+   * @param engineJwtFilePath the engine apis
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setEngineJwtFile(final String engineJwtFilePath) {
+    this.engineJwtFilePath = engineJwtFilePath;
+    return this;
+  }
+
+  /**
+   * Sets the environment variables.
+   *
+   * @param environment the environment variables
+   * @return the builder
+   */
+  public ConfigurationOverviewBuilder setEnvironment(final Map<String, String> environment) {
+    this.environment = environment;
     return this;
   }
 
@@ -156,7 +271,7 @@ public class ConfigurationOverviewBuilder {
    */
   public String build() {
     final List<String> lines = new ArrayList<>();
-    lines.add("Besu " + BesuInfo.class.getPackage().getImplementationVersion());
+    lines.add("Besu version " + BesuInfo.class.getPackage().getImplementationVersion());
     lines.add("");
     lines.add("Configuration:");
 
@@ -166,7 +281,9 @@ public class ConfigurationOverviewBuilder {
     }
 
     if (hasCustomGenesis) {
-      lines.add("Network: Custom genesis file specified");
+      lines.add("Network: Custom genesis file");
+      lines.add(
+          customGenesisFileName == null ? "Custom genesis file is null" : customGenesisFileName);
     }
 
     if (networkId != null) {
@@ -194,9 +311,27 @@ public class ConfigurationOverviewBuilder {
     if (enginePort != null) {
       lines.add("Engine port: " + enginePort);
     }
+    if (engineJwtFilePath != null) {
+      lines.add("Engine JWT: " + engineJwtFilePath);
+    }
+
+    lines.add("Using " + txPoolImplementation + " transaction pool implementation");
 
     if (isHighSpec) {
-      lines.add("High spec configuration enabled");
+      lines.add("Experimental high spec configuration enabled");
+    }
+
+    lines.add("Using " + worldStateUpdateMode + " worldstate update mode");
+
+    if (isTrieLogPruningEnabled) {
+      final StringBuilder trieLogPruningString = new StringBuilder();
+      trieLogPruningString
+          .append("Trie log pruning enabled: retention: ")
+          .append(trieLogRetentionThreshold);
+      if (trieLogPruningLimit != null) {
+        trieLogPruningString.append("; prune limit: ").append(trieLogPruningLimit);
+      }
+      lines.add(trieLogPruningString.toString());
     }
 
     lines.add("");
@@ -211,6 +346,8 @@ public class ConfigurationOverviewBuilder {
       if (glibcVersion != null) {
         lines.add("glibc: " + glibcVersion);
       }
+
+      detectJemalloc(lines);
     }
 
     final HardwareAbstractionLayer hardwareInfo = new SystemInfo().getHardware();
@@ -218,10 +355,50 @@ public class ConfigurationOverviewBuilder {
     lines.add("Total memory: " + normalizeSize(hardwareInfo.getMemory().getTotal()));
     lines.add("CPU cores: " + hardwareInfo.getProcessor().getLogicalProcessorCount());
 
+    lines.add("");
+
+    if (besuPluginContext != null) {
+      lines.addAll(besuPluginContext.getPluginsSummaryLog());
+    }
+
     return FramedLogMessage.generate(lines);
+  }
+
+  private void detectJemalloc(final List<String> lines) {
+    Optional.ofNullable(Objects.isNull(environment) ? null : environment.get("BESU_USING_JEMALLOC"))
+        .ifPresentOrElse(
+            t -> {
+              try {
+                final String version = PlatformDetector.getJemalloc();
+                lines.add("jemalloc: " + version);
+              } catch (final Throwable throwable) {
+                logger.warn(
+                    "BESU_USING_JEMALLOC is present but we failed to load jemalloc library to get the version",
+                    throwable);
+              }
+            },
+            () -> {
+              // in case the user is using jemalloc without BESU_USING_JEMALLOC env var
+              try {
+                final String version = PlatformDetector.getJemalloc();
+                lines.add("jemalloc: " + version);
+              } catch (final Throwable throwable) {
+                logger.info(
+                    "jemalloc library not found, memory usage may be reduced by installing it");
+              }
+            });
   }
 
   private String normalizeSize(final long size) {
     return String.format("%.02f", (double) (size) / 1024 / 1024 / 1024) + " GB";
+  }
+
+  /**
+   * set the plugin context
+   *
+   * @param besuPluginContext the plugin context
+   */
+  public void setPluginContext(final BesuPluginContextImpl besuPluginContext) {
+    this.besuPluginContext = besuPluginContext;
   }
 }

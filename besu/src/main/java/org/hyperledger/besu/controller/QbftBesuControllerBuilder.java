@@ -27,6 +27,7 @@ import org.hyperledger.besu.consensus.common.bft.BftEventQueue;
 import org.hyperledger.besu.consensus.common.bft.BftExecutors;
 import org.hyperledger.besu.consensus.common.bft.BftExtraDataCodec;
 import org.hyperledger.besu.consensus.common.bft.BftProcessor;
+import org.hyperledger.besu.consensus.common.bft.BftProtocolSchedule;
 import org.hyperledger.besu.consensus.common.bft.BlockTimer;
 import org.hyperledger.besu.consensus.common.bft.EthSynchronizerUpdater;
 import org.hyperledger.besu.consensus.common.bft.EventMultiplexer;
@@ -47,7 +48,7 @@ import org.hyperledger.besu.consensus.qbft.QbftContext;
 import org.hyperledger.besu.consensus.qbft.QbftExtraDataCodec;
 import org.hyperledger.besu.consensus.qbft.QbftForksSchedulesFactory;
 import org.hyperledger.besu.consensus.qbft.QbftGossip;
-import org.hyperledger.besu.consensus.qbft.QbftProtocolSchedule;
+import org.hyperledger.besu.consensus.qbft.QbftProtocolScheduleBuilder;
 import org.hyperledger.besu.consensus.qbft.blockcreation.QbftBlockCreatorFactory;
 import org.hyperledger.besu.consensus.qbft.jsonrpc.QbftJsonRpcMethods;
 import org.hyperledger.besu.consensus.qbft.payload.MessageFactory;
@@ -81,6 +82,7 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.p2p.config.SubProtocolConfiguration;
 import org.hyperledger.besu.ethereum.transaction.TransactionSimulator;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
+import org.hyperledger.besu.plugin.services.BesuEvents;
 import org.hyperledger.besu.util.Subscribers;
 
 import java.util.HashMap;
@@ -180,15 +182,17 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
         BftExecutors.create(metricsSystem, BftExecutors.ConsensusType.QBFT);
 
     final Address localAddress = Util.publicKeyToAddress(nodeKey.getPublicKey());
+    final BftProtocolSchedule bftProtocolSchedule = (BftProtocolSchedule) protocolSchedule;
     final BftBlockCreatorFactory<?> blockCreatorFactory =
         new QbftBlockCreatorFactory(
-            transactionPool.getPendingTransactions(),
+            transactionPool,
             protocolContext,
-            protocolSchedule,
+            bftProtocolSchedule,
             qbftForksSchedule,
             miningParameters,
             localAddress,
-            bftExtraDataCodec().get());
+            bftExtraDataCodec().get(),
+            ethProtocolManager.ethContext().getScheduler());
 
     final ValidatorProvider validatorProvider =
         protocolContext.getConsensusContext(BftContext.class).getValidatorProvider();
@@ -219,7 +223,7 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
 
     final MessageValidatorFactory messageValidatorFactory =
         new MessageValidatorFactory(
-            proposerSelector, protocolSchedule, protocolContext, bftExtraDataCodec().get());
+            proposerSelector, bftProtocolSchedule, protocolContext, bftExtraDataCodec().get());
 
     final Subscribers<MinedBlockObserver> minedBlockObservers = Subscribers.create();
     minedBlockObservers.subscribe(ethProtocolManager);
@@ -244,7 +248,7 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
                 new QbftRoundFactory(
                     finalState,
                     protocolContext,
-                    protocolSchedule,
+                    bftProtocolSchedule,
                     minedBlockObservers,
                     messageValidatorFactory,
                     messageFactory,
@@ -269,7 +273,30 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
             blockCreatorFactory,
             blockchain,
             bftEventQueue);
-    miningCoordinator.enable();
+
+    if (syncState.isInitialSyncPhaseDone()) {
+      LOG.info("Starting QBFT mining coordinator");
+      miningCoordinator.enable();
+      miningCoordinator.start();
+    } else {
+      LOG.info("QBFT mining coordinator not starting while initial sync in progress");
+    }
+
+    syncState.subscribeCompletionReached(
+        new BesuEvents.InitialSyncCompletionListener() {
+          @Override
+          public void onInitialSyncCompleted() {
+            LOG.info("Starting QBFT mining coordinator following initial sync");
+            miningCoordinator.enable();
+            miningCoordinator.start();
+          }
+
+          @Override
+          public void onInitialSyncRestart() {
+            // Nothing to do. The mining coordinator won't be started until
+            // sync has completed.
+          }
+        });
 
     return miningCoordinator;
   }
@@ -285,7 +312,7 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
 
   @Override
   protected ProtocolSchedule createProtocolSchedule() {
-    return QbftProtocolSchedule.create(
+    return QbftProtocolScheduleBuilder.create(
         configOptionsSupplier.get(),
         qbftForksSchedule,
         privacyParameters,
@@ -340,7 +367,7 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
             blockchain, epochManager, bftBlockInterface().get(), validatorOverrides);
 
     final TransactionSimulator transactionSimulator =
-        new TransactionSimulator(blockchain, worldStateArchive, protocolSchedule);
+        new TransactionSimulator(blockchain, worldStateArchive, protocolSchedule, 0L);
     transactionValidatorProvider =
         new TransactionValidatorProvider(
             blockchain, new ValidatorContractController(transactionSimulator), qbftForksSchedule);
@@ -379,7 +406,7 @@ public class QbftBesuControllerBuilder extends BftBesuControllerBuilder {
                 block.getHeader().getCoinbase().equals(localAddress) ? "Produced" : "Imported",
                 block.getHeader().getNumber(),
                 block.getBody().getTransactions().size(),
-                transactionPool.getPendingTransactions().size(),
+                transactionPool.count(),
                 block.getHeader().getGasUsed(),
                 (block.getHeader().getGasUsed() * 100.0) / block.getHeader().getGasLimit(),
                 block.getHash().toHexString()));

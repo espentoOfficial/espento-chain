@@ -15,7 +15,7 @@
 package org.hyperledger.besu.ethereum.eth.transactions;
 
 import static java.util.Collections.singletonList;
-import static org.assertj.core.util.Preconditions.checkNotNull;
+import static java.util.Objects.requireNonNull;
 import static org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider.createInMemoryBlockchain;
 import static org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider.createInMemoryWorldStateArchive;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -24,15 +24,13 @@ import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.config.GenesisConfigFile;
 import org.hyperledger.besu.crypto.KeyPair;
-import org.hyperledger.besu.crypto.NodeKey;
-import org.hyperledger.besu.crypto.NodeKeyUtils;
-import org.hyperledger.besu.datatypes.Wei;
+import org.hyperledger.besu.cryptoservices.NodeKey;
+import org.hyperledger.besu.cryptoservices.NodeKeyUtils;
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.chain.GenesisState;
 import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider;
-import org.hyperledger.besu.ethereum.core.MiningParameters;
 import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.difficulty.fixed.FixedDifficultyProtocolSchedule;
 import org.hyperledger.besu.ethereum.eth.EthProtocol;
@@ -54,12 +52,15 @@ import org.hyperledger.besu.ethereum.p2p.network.NetworkRunner;
 import org.hyperledger.besu.ethereum.p2p.network.P2PNetwork;
 import org.hyperledger.besu.ethereum.p2p.peers.DefaultPeer;
 import org.hyperledger.besu.ethereum.p2p.peers.Peer;
+import org.hyperledger.besu.ethereum.p2p.rlpx.RlpxAgent;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.PeerConnection;
 import org.hyperledger.besu.ethereum.p2p.rlpx.wire.messages.DisconnectMessage.DisconnectReason;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
+import org.hyperledger.besu.plugin.data.EnodeURL;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
+import org.hyperledger.besu.plugin.services.permissioning.NodeMessagePermissioningProvider;
 import org.hyperledger.besu.testutil.TestClock;
 
 import java.io.Closeable;
@@ -93,8 +94,8 @@ public class TestNode implements Closeable {
       final Integer port,
       final KeyPair kp,
       final DiscoveryConfiguration discoveryCfg) {
-    checkNotNull(vertx);
-    checkNotNull(discoveryCfg);
+    requireNonNull(vertx);
+    requireNonNull(discoveryCfg);
 
     final int listenPort = port != null ? port : 0;
     this.nodeKey = kp != null ? NodeKeyUtils.createFrom(kp) : NodeKeyUtils.generate();
@@ -120,7 +121,7 @@ public class TestNode implements Closeable {
     final WorldStateArchive worldStateArchive = createInMemoryWorldStateArchive();
     genesisState.writeStateTo(worldStateArchive.getMutable());
     final ProtocolContext protocolContext =
-        new ProtocolContext(blockchain, worldStateArchive, null);
+        new ProtocolContext(blockchain, worldStateArchive, null, Optional.empty());
 
     final SyncState syncState = mock(SyncState.class);
     final SynchronizerConfiguration syncConfig = mock(SynchronizerConfiguration.class);
@@ -128,14 +129,26 @@ public class TestNode implements Closeable {
     when(syncState.isInitialSyncPhaseDone()).thenReturn(true);
 
     final EthMessages ethMessages = new EthMessages();
-
+    final NodeMessagePermissioningProvider nmpp =
+        new NodeMessagePermissioningProvider() {
+          @Override
+          public boolean isMessagePermitted(final EnodeURL destinationEnode, final int code) {
+            return true;
+          }
+        };
     final EthPeers ethPeers =
         new EthPeers(
             EthProtocol.NAME,
+            () -> protocolSchedule.getByBlockHeader(blockchain.getChainHeadHeader()),
             TestClock.fixed(),
             metricsSystem,
+            EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE,
+            Collections.singletonList(nmpp),
+            Bytes.random(64),
             25,
-            EthProtocolConfiguration.DEFAULT_MAX_MESSAGE_SIZE);
+            25,
+            25,
+            false);
 
     final EthScheduler scheduler = new EthScheduler(1, 1, 1, metricsSystem);
     final EthContext ethContext = new EthContext(ethPeers, ethMessages, scheduler);
@@ -148,8 +161,9 @@ public class TestNode implements Closeable {
             TestClock.system(ZoneId.systemDefault()),
             metricsSystem,
             syncState,
-            new MiningParameters.Builder().minTransactionGasPrice(Wei.ZERO).build(),
-            TransactionPoolConfiguration.DEFAULT);
+            TransactionPoolConfiguration.DEFAULT,
+            null,
+            new BlobCache());
 
     final EthProtocolManager ethProtocolManager =
         new EthProtocolManager(
@@ -182,10 +196,15 @@ public class TestNode implements Closeable {
                         .blockchain(blockchain)
                         .blockNumberForks(Collections.emptyList())
                         .timestampForks(Collections.emptyList())
+                        .allConnectionsSupplier(ethPeers::getAllConnections)
+                        .allActiveConnectionsSupplier(ethPeers::getAllActiveConnections)
                         .build())
             .metricsSystem(new NoOpMetricsSystem())
             .build();
     network = networkRunner.getNetwork();
+    final RlpxAgent rlpxAgent = network.getRlpxAgent();
+    rlpxAgent.subscribeConnectRequest((p, d) -> true);
+    ethPeers.setRlpxAgent(rlpxAgent);
     network.subscribeDisconnect(
         (connection, reason, initiatedByPeer) -> disconnections.put(connection, reason));
 
@@ -245,10 +264,10 @@ public class TestNode implements Closeable {
   }
 
   public void receiveLocalTransaction(final Transaction transaction) {
-    transactionPool.addLocalTransaction(transaction);
+    transactionPool.addTransactionViaApi(transaction);
   }
 
   public int getPendingTransactionCount() {
-    return transactionPool.getPendingTransactions().size();
+    return transactionPool.count();
   }
 }

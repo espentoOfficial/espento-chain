@@ -117,10 +117,12 @@ public interface Words {
    * @return value of a plus b if no over/underflows or Long.MAX_VALUE/Long.MIN_VALUE otherwise
    */
   static long clampedAdd(final long a, final long b) {
-    try {
-      return Math.addExact(a, b);
-    } catch (final ArithmeticException ae) {
+    long r = a + b;
+    if (((a ^ r) & (b ^ r)) < 0) {
+      // out of bounds, clamp it!
       return a > 0 ? Long.MAX_VALUE : Long.MIN_VALUE;
+    } else {
+      return r;
     }
   }
 
@@ -132,26 +134,15 @@ public interface Words {
    * @return value of a times b if no over/underflows or Long.MAX_VALUE/Long.MIN_VALUE otherwise
    */
   static long clampedMultiply(final long a, final long b) {
-    try {
-      return Math.multiplyExact(a, b);
-    } catch (final ArithmeticException ae) {
+    long r = a * b;
+    long ax = Math.abs(a);
+    long ay = Math.abs(b);
+    if (((ax | ay) >>> 31 != 0)
+        && (((b != 0) && (r / b != a)) || (a == Long.MIN_VALUE && b == -1))) {
+      // out of bounds, clamp it!
       return ((a ^ b) < 0) ? Long.MIN_VALUE : Long.MAX_VALUE;
-    }
-  }
-
-  /**
-   * Multiplies a and b, but if an underflow/overflow occurs return the Integer max/min value
-   *
-   * @param a first value
-   * @param b second value
-   * @return value of a times b if no over/underflows or Integer.MAX_VALUE/Integer.MIN_VALUE
-   *     otherwise
-   */
-  static int clampedMultiply(final int a, final int b) {
-    try {
-      return Math.multiplyExact(a, b);
-    } catch (final ArithmeticException ae) {
-      return ((a ^ b) < 0) ? Integer.MIN_VALUE : Integer.MAX_VALUE;
+    } else {
+      return r;
     }
   }
 
@@ -192,5 +183,34 @@ public interface Words {
       throw new IndexOutOfBoundsException();
     }
     return (array[index] << 8) | (array[index + 1] & 0xff);
+  }
+
+  /**
+   * Get the big-endian Bytes representation of an unsigned int, including leading zeros
+   *
+   * @param value the int value
+   * @return a Bytes object of the value, Big Endian order
+   */
+  static Bytes intBytes(final int value) {
+    return Bytes.of(
+        (byte) (value >>> 24), (byte) (value >>> 16), (byte) (value >>> 8), (byte) value);
+  }
+
+  /**
+   * Get the big-endian Bytes representation of an unsigned int, including leading zeros
+   *
+   * @param value the long value
+   * @return a Bytes object of the value, Big Endian order
+   */
+  static Bytes longBytes(final long value) {
+    return Bytes.of(
+        (byte) (value >>> 56),
+        (byte) (value >>> 48),
+        (byte) (value >>> 40),
+        (byte) (value >>> 32),
+        (byte) (value >>> 24),
+        (byte) (value >>> 16),
+        (byte) (value >>> 8),
+        (byte) value);
   }
 }

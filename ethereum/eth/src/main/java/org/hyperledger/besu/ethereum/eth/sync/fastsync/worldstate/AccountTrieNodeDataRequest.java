@@ -1,5 +1,5 @@
 /*
- * Copyright ConsenSys AG.
+ * Copyright Hyperledger Besu Contributors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -15,11 +15,12 @@
 package org.hyperledger.besu.ethereum.eth.sync.fastsync.worldstate;
 
 import org.hyperledger.besu.datatypes.Hash;
-import org.hyperledger.besu.ethereum.bonsai.BonsaiWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.rlp.RLP;
 import org.hyperledger.besu.ethereum.rlp.RLPOutput;
 import org.hyperledger.besu.ethereum.trie.CompactEncoding;
-import org.hyperledger.besu.ethereum.trie.MerklePatriciaTrie;
+import org.hyperledger.besu.ethereum.trie.MerkleTrie;
+import org.hyperledger.besu.ethereum.trie.bonsai.storage.BonsaiWorldStateKeyValueStorage;
+import org.hyperledger.besu.ethereum.worldstate.FlatDbMode;
 import org.hyperledger.besu.ethereum.worldstate.StateTrieAccountValue;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage.Updater;
@@ -65,7 +66,6 @@ class AccountTrieNodeDataRequest extends TrieNodeDataRequest {
       final Bytes value) {
     final Stream.Builder<NodeDataRequest> builder = Stream.builder();
     final StateTrieAccountValue accountValue = StateTrieAccountValue.readFrom(RLP.input(value));
-    // Add code, if appropriate
 
     final Optional<Hash> accountHash =
         Optional.of(
@@ -73,17 +73,18 @@ class AccountTrieNodeDataRequest extends TrieNodeDataRequest {
                 Bytes32.wrap(
                     CompactEncoding.pathToBytes(
                         Bytes.concatenate(getLocation().orElse(Bytes.EMPTY), path)))));
-    if (worldStateStorage instanceof BonsaiWorldStateKeyValueStorage) {
+    if (!worldStateStorage.getFlatDbMode().equals(FlatDbMode.NO_FLATTENED)) {
       ((BonsaiWorldStateKeyValueStorage.Updater) worldStateStorage.updater())
           .putAccountInfoState(accountHash.get(), value)
           .commit();
     }
 
+    // Add code, if appropriate
     if (!accountValue.getCodeHash().equals(Hash.EMPTY)) {
       builder.add(createCodeRequest(accountValue.getCodeHash(), accountHash));
     }
     // Add storage, if appropriate
-    if (!accountValue.getStorageRoot().equals(MerklePatriciaTrie.EMPTY_TRIE_NODE_HASH)) {
+    if (!accountValue.getStorageRoot().equals(MerkleTrie.EMPTY_TRIE_NODE_HASH)) {
       // If storage is non-empty queue download
 
       final NodeDataRequest storageNode =

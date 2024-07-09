@@ -25,6 +25,7 @@ import org.hyperledger.besu.consensus.common.bft.BftEventQueue;
 import org.hyperledger.besu.consensus.common.bft.BftExecutors;
 import org.hyperledger.besu.consensus.common.bft.BftExtraDataCodec;
 import org.hyperledger.besu.consensus.common.bft.BftProcessor;
+import org.hyperledger.besu.consensus.common.bft.BftProtocolSchedule;
 import org.hyperledger.besu.consensus.common.bft.BlockTimer;
 import org.hyperledger.besu.consensus.common.bft.EthSynchronizerUpdater;
 import org.hyperledger.besu.consensus.common.bft.EventMultiplexer;
@@ -44,7 +45,7 @@ import org.hyperledger.besu.consensus.common.validator.blockbased.BlockValidator
 import org.hyperledger.besu.consensus.ibft.IbftExtraDataCodec;
 import org.hyperledger.besu.consensus.ibft.IbftForksSchedulesFactory;
 import org.hyperledger.besu.consensus.ibft.IbftGossip;
-import org.hyperledger.besu.consensus.ibft.IbftProtocolSchedule;
+import org.hyperledger.besu.consensus.ibft.IbftProtocolScheduleBuilder;
 import org.hyperledger.besu.consensus.ibft.jsonrpc.IbftJsonRpcMethods;
 import org.hyperledger.besu.consensus.ibft.payload.MessageFactory;
 import org.hyperledger.besu.consensus.ibft.protocol.IbftSubProtocol;
@@ -71,6 +72,7 @@ import org.hyperledger.besu.ethereum.eth.transactions.TransactionPool;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.p2p.config.SubProtocolConfiguration;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
+import org.hyperledger.besu.plugin.services.BesuEvents;
 import org.hyperledger.besu.util.Subscribers;
 
 import java.util.HashMap;
@@ -142,15 +144,17 @@ public class IbftBesuControllerBuilder extends BftBesuControllerBuilder {
         BftExecutors.create(metricsSystem, BftExecutors.ConsensusType.IBFT);
 
     final Address localAddress = Util.publicKeyToAddress(nodeKey.getPublicKey());
+    final BftProtocolSchedule bftProtocolSchedule = (BftProtocolSchedule) protocolSchedule;
     final BftBlockCreatorFactory<?> blockCreatorFactory =
         new BftBlockCreatorFactory<>(
-            transactionPool.getPendingTransactions(),
+            transactionPool,
             protocolContext,
-            protocolSchedule,
+            bftProtocolSchedule,
             forksSchedule,
             miningParameters,
             localAddress,
-            bftExtraDataCodec().get());
+            bftExtraDataCodec().get(),
+            ethProtocolManager.ethContext().getScheduler());
 
     final ValidatorProvider validatorProvider =
         protocolContext.getConsensusContext(BftContext.class).getValidatorProvider();
@@ -181,7 +185,7 @@ public class IbftBesuControllerBuilder extends BftBesuControllerBuilder {
 
     final MessageValidatorFactory messageValidatorFactory =
         new MessageValidatorFactory(
-            proposerSelector, protocolSchedule, protocolContext, bftExtraDataCodec().get());
+            proposerSelector, bftProtocolSchedule, protocolContext, bftExtraDataCodec().get());
 
     final Subscribers<MinedBlockObserver> minedBlockObservers = Subscribers.create();
     minedBlockObservers.subscribe(ethProtocolManager);
@@ -206,7 +210,7 @@ public class IbftBesuControllerBuilder extends BftBesuControllerBuilder {
                 new IbftRoundFactory(
                     finalState,
                     protocolContext,
-                    protocolSchedule,
+                    bftProtocolSchedule,
                     minedBlockObservers,
                     messageValidatorFactory,
                     messageFactory,
@@ -229,7 +233,30 @@ public class IbftBesuControllerBuilder extends BftBesuControllerBuilder {
             blockCreatorFactory,
             blockchain,
             bftEventQueue);
-    ibftMiningCoordinator.enable();
+
+    if (syncState.isInitialSyncPhaseDone()) {
+      LOG.info("Starting IBFT mining coordinator");
+      ibftMiningCoordinator.enable();
+      ibftMiningCoordinator.start();
+    } else {
+      LOG.info("IBFT mining coordinator not starting while initial sync in progress");
+    }
+
+    syncState.subscribeCompletionReached(
+        new BesuEvents.InitialSyncCompletionListener() {
+          @Override
+          public void onInitialSyncCompleted() {
+            LOG.info("Starting IBFT mining coordinator following initial sync");
+            ibftMiningCoordinator.enable();
+            ibftMiningCoordinator.start();
+          }
+
+          @Override
+          public void onInitialSyncRestart() {
+            // Nothing to do. The mining coordinator won't be started until
+            // sync has completed.
+          }
+        });
 
     return ibftMiningCoordinator;
   }
@@ -245,7 +272,7 @@ public class IbftBesuControllerBuilder extends BftBesuControllerBuilder {
 
   @Override
   protected ProtocolSchedule createProtocolSchedule() {
-    return IbftProtocolSchedule.create(
+    return IbftProtocolScheduleBuilder.create(
         configOptionsSupplier.get(),
         forksSchedule,
         privacyParameters,
@@ -308,7 +335,7 @@ public class IbftBesuControllerBuilder extends BftBesuControllerBuilder {
                 block.getHeader().getCoinbase().equals(localAddress) ? "Produced" : "Imported",
                 block.getHeader().getNumber(),
                 block.getBody().getTransactions().size(),
-                transactionPool.getPendingTransactions().size(),
+                transactionPool.count(),
                 block.getHeader().getGasUsed(),
                 (block.getHeader().getGasUsed() * 100.0) / block.getHeader().getGasLimit(),
                 block.getHash().toHexString()));

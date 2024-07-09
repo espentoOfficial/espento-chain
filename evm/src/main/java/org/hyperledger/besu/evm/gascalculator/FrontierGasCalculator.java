@@ -25,7 +25,8 @@ import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.internal.Words;
 import org.hyperledger.besu.evm.operation.ExpOperation;
 
-import com.google.common.base.Supplier;
+import java.util.function.Supplier;
+
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.units.bigints.UInt256;
 
@@ -487,5 +488,10 @@ public class FrontierGasCalculator implements GasCalculator {
   @Override
   public long getMaximumTransactionCost(final int size) {
     return TX_BASE_COST + TX_DATA_NON_ZERO_COST * size;
+  }
+
+  @Override
+  public long getMinimumTransactionCost() {
+    return TX_BASE_COST;
   }
 }

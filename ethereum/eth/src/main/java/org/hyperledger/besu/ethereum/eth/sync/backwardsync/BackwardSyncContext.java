@@ -15,12 +15,11 @@
 package org.hyperledger.besu.ethereum.eth.sync.backwardsync;
 
 import static org.hyperledger.besu.util.FutureUtils.exceptionallyCompose;
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.debugLambda;
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.traceLambda;
 
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.BlockValidator;
 import org.hyperledger.besu.ethereum.ProtocolContext;
+import org.hyperledger.besu.ethereum.chain.BadBlockManager;
 import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.core.Block;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
@@ -48,6 +47,7 @@ public class BackwardSyncContext {
   private static final int DEFAULT_MAX_RETRIES = 20;
   private static final long MILLIS_DELAY_BETWEEN_PROGRESS_LOG = 10_000L;
   private static final long DEFAULT_MILLIS_BETWEEN_RETRIES = 5000;
+  private static final int DEFAULT_MAX_CHAIN_EVENT_ENTRIES = BadBlockManager.MAX_BAD_BLOCKS_SIZE;
 
   protected final ProtocolContext protocolContext;
   private final ProtocolSchedule protocolSchedule;
@@ -57,8 +57,8 @@ public class BackwardSyncContext {
   private final AtomicReference<Status> currentBackwardSyncStatus = new AtomicReference<>();
   private final BackwardChain backwardChain;
   private int batchSize = BATCH_SIZE;
-  private Optional<Hash> maybeHead = Optional.empty();
   private final int maxRetries;
+  private final int maxBadChainEventEntries;
   private final long millisBetweenRetries = DEFAULT_MILLIS_BETWEEN_RETRIES;
   private final Subscribers<BadChainListener> badChainListeners = Subscribers.create();
 
@@ -76,7 +76,8 @@ public class BackwardSyncContext {
         ethContext,
         syncState,
         backwardChain,
-        DEFAULT_MAX_RETRIES);
+        DEFAULT_MAX_RETRIES,
+        DEFAULT_MAX_CHAIN_EVENT_ENTRIES);
   }
 
   public BackwardSyncContext(
@@ -86,7 +87,8 @@ public class BackwardSyncContext {
       final EthContext ethContext,
       final SyncState syncState,
       final BackwardChain backwardChain,
-      final int maxRetries) {
+      final int maxRetries,
+      final int maxBadChainEventEntries) {
 
     this.protocolContext = protocolContext;
     this.protocolSchedule = protocolSchedule;
@@ -95,6 +97,7 @@ public class BackwardSyncContext {
     this.syncState = syncState;
     this.backwardChain = backwardChain;
     this.maxRetries = maxRetries;
+    this.maxBadChainEventEntries = maxBadChainEventEntries;
   }
 
   public synchronized boolean isSyncing() {
@@ -103,17 +106,21 @@ public class BackwardSyncContext {
         .orElse(Boolean.FALSE);
   }
 
-  public synchronized void updateHead(final Hash headHash) {
-    if (Hash.ZERO.equals(headHash)) {
-      maybeHead = Optional.empty();
-    } else {
-      maybeHead = Optional.of(headHash);
+  public synchronized void maybeUpdateTargetHeight(final Hash headHash) {
+    if (!Hash.ZERO.equals(headHash)) {
       Optional<Status> maybeCurrentStatus = Optional.ofNullable(currentBackwardSyncStatus.get());
       maybeCurrentStatus.ifPresent(
           status ->
               backwardChain
                   .getBlock(headHash)
-                  .ifPresent(block -> status.updateTargetHeight(block.getHeader().getNumber())));
+                  .ifPresent(
+                      block -> {
+                        LOG.atTrace()
+                            .setMessage("updateTargetHeight to {}")
+                            .addArgument(block::toLogString)
+                            .log();
+                        status.updateTargetHeight(block.getHeader().getNumber());
+                      }));
     }
   }
 
@@ -122,12 +129,16 @@ public class BackwardSyncContext {
       backwardChain.addNewHash(newBlockHash);
     }
 
-    final Status status = getOrStartSyncSession();
-    backwardChain
-        .getBlock(newBlockHash)
-        .ifPresent(
-            newTargetBlock -> status.updateTargetHeight(newTargetBlock.getHeader().getNumber()));
-    return status.currentFuture;
+    if (isReady()) {
+      final Status status = getOrStartSyncSession();
+      backwardChain
+          .getBlock(newBlockHash)
+          .ifPresent(
+              newTargetBlock -> status.updateTargetHeight(newTargetBlock.getHeader().getNumber()));
+      return status.currentFuture;
+    } else {
+      return CompletableFuture.failedFuture(new Throwable("Backward sync is not ready"));
+    }
   }
 
   public synchronized CompletableFuture<Void> syncBackwardsUntil(final Block newPivot) {
@@ -135,9 +146,13 @@ public class BackwardSyncContext {
       backwardChain.appendTrustedBlock(newPivot);
     }
 
-    final Status status = getOrStartSyncSession();
-    status.updateTargetHeight(newPivot.getHeader().getNumber());
-    return status.currentFuture;
+    if (isReady()) {
+      final Status status = getOrStartSyncSession();
+      status.updateTargetHeight(newPivot.getHeader().getNumber());
+      return status.currentFuture;
+    } else {
+      return CompletableFuture.failedFuture(new Throwable("Backward sync is not ready"));
+    }
   }
 
   private Status getOrStartSyncSession() {
@@ -153,10 +168,11 @@ public class BackwardSyncContext {
 
   private boolean isTrusted(final Hash hash) {
     if (backwardChain.isTrusted(hash)) {
-      debugLambda(
-          LOG,
-          "not fetching or appending hash {} to backwards sync since it is present in successors",
-          hash::toHexString);
+      LOG.atDebug()
+          .setMessage(
+              "Not fetching or appending hash {} to backward sync since it is present in successors")
+          .addArgument(hash::toHexString)
+          .log();
       return true;
     }
     return false;
@@ -206,8 +222,10 @@ public class BackwardSyncContext {
                     ethContext.getEthPeers().peerCount(),
                     millisBetweenRetries);
               } else {
-                debugLambda(
-                    LOG, "Not recoverable backward sync exception {}", throwable::getMessage);
+                LOG.atDebug()
+                    .setMessage("Not recoverable backward sync exception {}")
+                    .addArgument(throwable::getMessage)
+                    .log();
                 throw backwardSyncException;
               }
             },
@@ -236,7 +254,7 @@ public class BackwardSyncContext {
   @VisibleForTesting
   CompletableFuture<Void> prepareBackwardSyncFuture() {
     final MutableBlockchain blockchain = getProtocolContext().getBlockchain();
-    return new BackwardsSyncAlgorithm(
+    return new BackwardSyncAlgorithm(
             this,
             FinalBlockConfirmation.confirmationChain(
                 FinalBlockConfirmation.genesisConfirmation(blockchain),
@@ -260,12 +278,12 @@ public class BackwardSyncContext {
     return protocolContext;
   }
 
-  public BlockValidator getBlockValidator(final long blockNumber) {
-    return protocolSchedule.getByBlockNumber(blockNumber).getBlockValidator();
+  public BlockValidator getBlockValidator(final BlockHeader blockHeader) {
+    return protocolSchedule.getByBlockHeader(blockHeader).getBlockValidator();
   }
 
   public BlockValidator getBlockValidatorForBlock(final Block block) {
-    return getBlockValidator(block.getHeader().getNumber());
+    return getBlockValidator(block.getHeader());
   }
 
   public boolean isReady() {
@@ -296,7 +314,7 @@ public class BackwardSyncContext {
   }
 
   protected Void saveBlock(final Block block) {
-    traceLambda(LOG, "Going to validate block {}", block::toLogString);
+    LOG.atTrace().setMessage("Going to validate block {}").addArgument(block::toLogString).log();
     var optResult =
         this.getBlockValidatorForBlock(block)
             .validateAndProcessBlock(
@@ -305,7 +323,10 @@ public class BackwardSyncContext {
                 HeaderValidationMode.FULL,
                 HeaderValidationMode.NONE);
     if (optResult.isSuccessful()) {
-      traceLambda(LOG, "Block {} was validated, going to import it", block::toLogString);
+      LOG.atTrace()
+          .setMessage("Block {} was validated, going to import it")
+          .addArgument(block::toLogString)
+          .log();
       optResult.getYield().get().getWorldState().persist(block.getHeader());
       this.getProtocolContext()
           .getBlockchain()
@@ -327,24 +348,19 @@ public class BackwardSyncContext {
   @VisibleForTesting
   protected void possiblyMoveHead(final Block lastSavedBlock) {
     final MutableBlockchain blockchain = getProtocolContext().getBlockchain();
-    if (maybeHead.isEmpty()) {
-      LOG.debug("Nothing to do with the head");
+
+    if (blockchain.getChainHead().getHash().equals(lastSavedBlock.getHash())) {
+      LOG.atDebug()
+          .setMessage("Head is already properly set to {}")
+          .addArgument(lastSavedBlock::toLogString)
+          .log();
       return;
     }
 
-    final Hash head = maybeHead.get();
-    if (blockchain.getChainHead().getHash().equals(head)) {
-      LOG.debug("Head is already properly set");
-      return;
-    }
-
-    if (blockchain.contains(head)) {
-      LOG.debug("Changing head to {}", head);
-      blockchain.rewindToBlock(head);
-      return;
-    }
-
-    debugLambda(LOG, "Rewinding head to last saved block {}", lastSavedBlock::toLogString);
+    LOG.atDebug()
+        .setMessage("Rewinding head to last saved block {}")
+        .addArgument(lastSavedBlock::toLogString)
+        .log();
     blockchain.rewindToBlock(lastSavedBlock.getHash());
   }
 
@@ -366,7 +382,9 @@ public class BackwardSyncContext {
 
     Optional<Hash> descendant = backwardChain.getDescendant(badBlock.getHash());
 
-    while (descendant.isPresent()) {
+    while (descendant.isPresent()
+        && badBlockDescendants.size() < maxBadChainEventEntries
+        && badBlockHeaderDescendants.size() < maxBadChainEventEntries) {
       final Optional<Block> block = backwardChain.getBlock(descendant.get());
       if (block.isPresent()) {
         badBlockDescendants.add(block.get());
@@ -433,10 +451,6 @@ public class BackwardSyncContext {
         return true;
       }
       return false;
-    }
-
-    public CompletableFuture<Void> getCurrentFuture() {
-      return currentFuture;
     }
 
     public long getTargetChainHeight() {

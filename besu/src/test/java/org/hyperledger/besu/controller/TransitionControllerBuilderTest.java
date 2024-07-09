@@ -16,11 +16,12 @@ package org.hyperledger.besu.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
+import org.hyperledger.besu.config.GenesisConfigFile;
 import org.hyperledger.besu.consensus.clique.BlockHeaderValidationRulesetFactory;
 import org.hyperledger.besu.consensus.clique.CliqueContext;
 import org.hyperledger.besu.consensus.common.EpochManager;
@@ -28,12 +29,14 @@ import org.hyperledger.besu.consensus.merge.MergeContext;
 import org.hyperledger.besu.consensus.merge.PostMergeContext;
 import org.hyperledger.besu.consensus.merge.TransitionProtocolSchedule;
 import org.hyperledger.besu.consensus.merge.blockcreation.TransitionCoordinator;
-import org.hyperledger.besu.crypto.NodeKeyUtils;
+import org.hyperledger.besu.cryptoservices.NodeKeyUtils;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.ProtocolContext;
 import org.hyperledger.besu.ethereum.chain.MutableBlockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeaderTestFixture;
 import org.hyperledger.besu.ethereum.core.Difficulty;
+import org.hyperledger.besu.ethereum.core.ImmutableMiningParameters;
+import org.hyperledger.besu.ethereum.core.ImmutableMiningParameters.MutableInitValues;
 import org.hyperledger.besu.ethereum.core.InMemoryKeyValueStorageProvider;
 import org.hyperledger.besu.ethereum.core.MiningParameters;
 import org.hyperledger.besu.ethereum.eth.manager.EthProtocolManager;
@@ -44,64 +47,78 @@ import org.hyperledger.besu.ethereum.mainnet.HeaderValidationMode;
 import org.hyperledger.besu.ethereum.mainnet.MainnetBlockHeaderValidator;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
-import org.hyperledger.besu.ethereum.mainnet.TimestampSchedule;
 import org.hyperledger.besu.ethereum.mainnet.feemarket.FeeMarket;
 import org.hyperledger.besu.ethereum.storage.StorageProvider;
 import org.hyperledger.besu.metrics.noop.NoOpMetricsSystem;
+import org.hyperledger.besu.testutil.DeterministicEthScheduler;
 
 import java.util.Optional;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
-import org.mockito.Spy;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
  * We only bother testing transitionControllerBuilder for PoW and Clique since those are the only
  * network types that are transitioning to PoS.
  */
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class TransitionControllerBuilderTest {
 
   @Mock ProtocolSchedule preMergeProtocolSchedule;
   @Mock ProtocolSchedule postMergeProtocolSchedule;
-  @Mock TimestampSchedule timestampSchedule;
   @Mock ProtocolContext protocolContext;
   @Mock MutableBlockchain mockBlockchain;
   @Mock TransactionPool transactionPool;
   @Mock SyncState syncState;
-  @Mock EthProtocolManager ethProtocolManager;
+
+  @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+  EthProtocolManager ethProtocolManager;
+
   @Mock PostMergeContext mergeContext;
   StorageProvider storageProvider = new InMemoryKeyValueStorageProvider();
 
-  @Spy CliqueBesuControllerBuilder cliqueBuilder = new CliqueBesuControllerBuilder();
-  @Spy BesuControllerBuilder powBuilder = new MainnetBesuControllerBuilder();
-  @Spy MergeBesuControllerBuilder postMergeBuilder = new MergeBesuControllerBuilder();
-  @Spy MiningParameters miningParameters = new MiningParameters.Builder().build();
+  CliqueBesuControllerBuilder cliqueBuilder = new CliqueBesuControllerBuilder();
+  BesuControllerBuilder powBuilder = new MainnetBesuControllerBuilder();
+  MergeBesuControllerBuilder postMergeBuilder = new MergeBesuControllerBuilder();
+  MiningParameters miningParameters;
 
   TransitionProtocolSchedule transitionProtocolSchedule;
 
-  @Before
+  @BeforeEach
   public void setup() {
     transitionProtocolSchedule =
         spy(
             new TransitionProtocolSchedule(
-                preMergeProtocolSchedule,
-                postMergeProtocolSchedule,
-                mergeContext,
-                timestampSchedule));
+                preMergeProtocolSchedule, postMergeProtocolSchedule, mergeContext));
     transitionProtocolSchedule.setProtocolContext(protocolContext);
     cliqueBuilder.nodeKey(NodeKeyUtils.generate());
+    cliqueBuilder.genesisConfigFile(GenesisConfigFile.DEFAULT);
+    powBuilder.genesisConfigFile(GenesisConfigFile.DEFAULT);
+    postMergeBuilder.genesisConfigFile(GenesisConfigFile.DEFAULT);
     postMergeBuilder.storageProvider(storageProvider);
-    when(protocolContext.getBlockchain()).thenReturn(mockBlockchain);
-    when(transitionProtocolSchedule.getPostMergeSchedule()).thenReturn(postMergeProtocolSchedule);
-    when(transitionProtocolSchedule.getPreMergeSchedule()).thenReturn(preMergeProtocolSchedule);
-    when(protocolContext.getConsensusContext(CliqueContext.class))
+    lenient().when(protocolContext.getBlockchain()).thenReturn(mockBlockchain);
+    lenient()
+        .when(transitionProtocolSchedule.getPostMergeSchedule())
+        .thenReturn(postMergeProtocolSchedule);
+    lenient()
+        .when(transitionProtocolSchedule.getPreMergeSchedule())
+        .thenReturn(preMergeProtocolSchedule);
+    lenient()
+        .when(protocolContext.getConsensusContext(CliqueContext.class))
         .thenReturn(mock(CliqueContext.class));
-    when(protocolContext.getConsensusContext(PostMergeContext.class)).thenReturn(mergeContext);
-    when(protocolContext.getConsensusContext(MergeContext.class)).thenReturn(mergeContext);
+    lenient()
+        .when(protocolContext.getConsensusContext(PostMergeContext.class))
+        .thenReturn(mergeContext);
+    lenient()
+        .when(protocolContext.getConsensusContext(MergeContext.class))
+        .thenReturn(mergeContext);
+    when(ethProtocolManager.ethContext().getScheduler())
+        .thenReturn(new DeterministicEthScheduler());
+    miningParameters = MiningParameters.newDefault();
   }
 
   @Test
@@ -120,7 +137,10 @@ public class TransitionControllerBuilderTest {
 
   @Test
   public void assertPowMiningPreMerge() {
-    when(miningParameters.isMiningEnabled()).thenReturn(Boolean.TRUE);
+    miningParameters =
+        ImmutableMiningParameters.builder()
+            .mutableInitValues(MutableInitValues.builder().isMiningEnabled(true).build())
+            .build();
     var transCoordinator = buildTransitionCoordinator(powBuilder, postMergeBuilder);
     assertThat(transCoordinator.isMiningBeforeMerge()).isTrue();
   }
@@ -131,8 +151,8 @@ public class TransitionControllerBuilderTest {
     var preMergeProtocolSpec = mock(ProtocolSpec.class);
     when(mergeContext.isPostMerge()).thenReturn(Boolean.FALSE);
     when(mergeContext.getFinalized()).thenReturn(Optional.empty());
-    when(preMergeProtocolSchedule.getByBlockNumber(anyLong())).thenReturn(preMergeProtocolSpec);
-    assertThat(transitionProtocolSchedule.getByBlockHeader(mockBlock))
+    when(preMergeProtocolSchedule.getByBlockHeader(any())).thenReturn(preMergeProtocolSpec);
+    assertThat(transitionProtocolSchedule.getByBlockHeaderWithTransitionReorgHandling(mockBlock))
         .isEqualTo(preMergeProtocolSpec);
   }
 
@@ -141,8 +161,8 @@ public class TransitionControllerBuilderTest {
     var mockBlock = new BlockHeaderTestFixture().buildHeader();
     var postMergeProtocolSpec = mock(ProtocolSpec.class);
     when(mergeContext.getFinalized()).thenReturn(Optional.of(mockBlock));
-    when(postMergeProtocolSchedule.getByBlockNumber(anyLong())).thenReturn(postMergeProtocolSpec);
-    assertThat(transitionProtocolSchedule.getByBlockHeader(mockBlock))
+    when(postMergeProtocolSchedule.getByBlockHeader(any())).thenReturn(postMergeProtocolSpec);
+    assertThat(transitionProtocolSchedule.getByBlockHeaderWithTransitionReorgHandling(mockBlock))
         .isEqualTo(postMergeProtocolSpec);
   }
 
@@ -164,8 +184,8 @@ public class TransitionControllerBuilderTest {
     when(mockBlockchain.getTotalDifficultyByHash(any()))
         .thenReturn(Optional.of(Difficulty.of(1335L)));
 
-    when(preMergeProtocolSchedule.getByBlockNumber(anyLong())).thenReturn(preMergeProtocolSpec);
-    assertThat(transitionProtocolSchedule.getByBlockHeader(mockBlock))
+    when(preMergeProtocolSchedule.getByBlockHeader(any())).thenReturn(preMergeProtocolSpec);
+    assertThat(transitionProtocolSchedule.getByBlockHeaderWithTransitionReorgHandling(mockBlock))
         .isEqualTo(preMergeProtocolSpec);
   }
 
@@ -187,8 +207,8 @@ public class TransitionControllerBuilderTest {
     when(mockBlockchain.getTotalDifficultyByHash(any()))
         .thenReturn(Optional.of(Difficulty.of(1337L)));
 
-    when(postMergeProtocolSchedule.getByBlockNumber(anyLong())).thenReturn(postMergeProtocolSpec);
-    assertThat(transitionProtocolSchedule.getByBlockHeader(mockBlock))
+    when(postMergeProtocolSchedule.getByBlockHeader(any())).thenReturn(postMergeProtocolSpec);
+    assertThat(transitionProtocolSchedule.getByBlockHeaderWithTransitionReorgHandling(mockBlock))
         .isEqualTo(postMergeProtocolSpec);
   }
 
@@ -196,7 +216,7 @@ public class TransitionControllerBuilderTest {
   public void assertCliqueDetachedHeaderValidationPreMerge() {
     BlockHeaderValidator cliqueValidator =
         BlockHeaderValidationRulesetFactory.cliqueBlockHeaderValidator(
-                5L, new EpochManager(5L), Optional.of(FeeMarket.london(1L)), true)
+                5L, true, new EpochManager(5L), Optional.of(FeeMarket.london(1L)), true)
             .build();
     assertDetachedRulesForPostMergeBlocks(cliqueValidator);
   }
@@ -213,7 +233,7 @@ public class TransitionControllerBuilderTest {
     var preMergeProtocolSpec = mock(ProtocolSpec.class);
     when(preMergeProtocolSpec.getBlockHeaderValidator()).thenReturn(validator);
 
-    when(preMergeProtocolSchedule.getByBlockNumber(anyLong())).thenReturn(preMergeProtocolSpec);
+    when(preMergeProtocolSchedule.getByBlockHeader(any())).thenReturn(preMergeProtocolSpec);
 
     var mockParentBlock =
         new BlockHeaderTestFixture()
@@ -235,7 +255,7 @@ public class TransitionControllerBuilderTest {
     var mergeFriendlyValidation =
         transitionProtocolSchedule
             .getPreMergeSchedule()
-            .getByBlockNumber(1L)
+            .getByBlockHeader(mockBlock)
             .getBlockHeaderValidator()
             .validateHeader(
                 mockBlock, mockParentBlock, protocolContext, HeaderValidationMode.DETACHED_ONLY);
@@ -245,6 +265,7 @@ public class TransitionControllerBuilderTest {
   TransitionCoordinator buildTransitionCoordinator(
       final BesuControllerBuilder preMerge, final MergeBesuControllerBuilder postMerge) {
     var builder = new TransitionBesuControllerBuilder(preMerge, postMerge);
+    builder.genesisConfigFile(GenesisConfigFile.mainnet());
     builder.storageProvider(storageProvider);
     builder.metricsSystem(new NoOpMetricsSystem());
     var coordinator =

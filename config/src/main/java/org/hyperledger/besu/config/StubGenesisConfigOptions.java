@@ -14,6 +14,7 @@
  */
 package org.hyperledger.besu.config;
 
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
 
@@ -29,7 +30,7 @@ import com.google.common.collect.ImmutableMap;
 import org.apache.tuweni.units.bigints.UInt256;
 
 /** The Stub genesis config options. */
-public class StubGenesisConfigOptions implements GenesisConfigOptions {
+public class StubGenesisConfigOptions implements GenesisConfigOptions, Cloneable {
 
   private OptionalLong homesteadBlockNumber = OptionalLong.empty();
   private OptionalLong daoForkBlock = OptionalLong.empty();
@@ -65,7 +66,7 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   private OptionalLong thanosBlockNumber = OptionalLong.empty();
   private OptionalLong magnetoBlockNumber = OptionalLong.empty();
   private OptionalLong mystiqueBlockNumber = OptionalLong.empty();
-  private OptionalLong ecip1049BlockNumber = OptionalLong.empty();
+  private OptionalLong spiralBlockNumber = OptionalLong.empty();
   private Optional<BigInteger> chainId = Optional.empty();
   private OptionalInt contractSizeLimit = OptionalInt.empty();
   private OptionalInt stackSizeLimit = OptionalInt.empty();
@@ -75,6 +76,16 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   private BftConfigOptions bftConfigOptions = JsonBftConfigOptions.DEFAULT;
   private TransitionsConfigOptions transitions = TransitionsConfigOptions.DEFAULT;
   private static final DiscoveryOptions DISCOVERY_OPTIONS = DiscoveryOptions.DEFAULT;
+  private boolean zeroBaseFee = false;
+
+  @Override
+  public StubGenesisConfigOptions clone() {
+    try {
+      return (StubGenesisConfigOptions) super.clone();
+    } catch (CloneNotSupportedException e) {
+      throw new RuntimeException(e);
+    }
+  }
 
   @Override
   public String getConsensusEngine() {
@@ -84,11 +95,6 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   @Override
   public boolean isEthHash() {
     return true;
-  }
-
-  @Override
-  public boolean isKeccak256() {
-    return false;
   }
 
   @Override
@@ -112,8 +118,8 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public IbftLegacyConfigOptions getIbftLegacyConfigOptions() {
-    return IbftLegacyConfigOptions.DEFAULT;
+  public boolean isPoa() {
+    return false;
   }
 
   @Override
@@ -144,11 +150,6 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   @Override
   public EthashConfigOptions getEthashConfigOptions() {
     return EthashConfigOptions.DEFAULT;
-  }
-
-  @Override
-  public Keccak256ConfigOptions getKeccak256ConfigOptions() {
-    return Keccak256ConfigOptions.DEFAULT;
   }
 
   @Override
@@ -317,8 +318,8 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public OptionalLong getEcip1049BlockNumber() {
-    return ecip1049BlockNumber;
+  public OptionalLong getSpiralBlockNumber() {
+    return spiralBlockNumber;
   }
 
   @Override
@@ -379,21 +380,16 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
     getThanosBlockNumber().ifPresent(l -> builder.put("thanosBlock", l));
     getMagnetoBlockNumber().ifPresent(l -> builder.put("magnetoBlock", l));
     getMystiqueBlockNumber().ifPresent(l -> builder.put("mystiqueBlock", l));
-    getEcip1049BlockNumber().ifPresent(l -> builder.put("ecip1049Block", l));
+    getSpiralBlockNumber().ifPresent(l -> builder.put("spiralBlock", l));
 
     getContractSizeLimit().ifPresent(l -> builder.put("contractSizeLimit", l));
     getEvmStackSize().ifPresent(l -> builder.put("evmStackSize", l));
+    getDepositContractAddress().ifPresent(l -> builder.put("depositContractAddress", l));
     if (isClique()) {
       builder.put("clique", getCliqueConfigOptions().asMap());
     }
     if (isEthHash()) {
       builder.put("ethash", getEthashConfigOptions().asMap());
-    }
-    if (isKeccak256()) {
-      builder.put("keccak256", getKeccak256ConfigOptions().asMap());
-    }
-    if (isIbftLegacy()) {
-      builder.put("ibft", getIbftLegacyConfigOptions().asMap());
     }
     if (isIbft2()) {
       builder.put("ibft2", getBftConfigOptions().asMap());
@@ -407,20 +403,8 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
-  public boolean isQuorum() {
-    return false;
-  }
-
-  @Override
-  public OptionalLong getQip714BlockNumber() {
-    return OptionalLong.empty();
-  }
-
-  @Override
   public PowAlgorithm getPowAlgorithm() {
-    return isEthHash()
-        ? PowAlgorithm.ETHASH
-        : isKeccak256() ? PowAlgorithm.KECCAK256 : PowAlgorithm.UNSUPPORTED;
+    return isEthHash() ? PowAlgorithm.ETHASH : PowAlgorithm.UNSUPPORTED;
   }
 
   @Override
@@ -430,7 +414,7 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
 
   @Override
   public boolean isZeroBaseFee() {
-    return false;
+    return zeroBaseFee;
   }
 
   @Override
@@ -441,6 +425,11 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   @Override
   public List<Long> getForkBlockTimestamps() {
     return Collections.emptyList();
+  }
+
+  @Override
+  public Optional<Address> getDepositContractAddress() {
+    return Optional.empty();
   }
 
   /**
@@ -622,22 +611,22 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   /**
    * Future EIPs Time block.
    *
-   * @param blockNumber the block number
+   * @param timestamp the block timestamp
    * @return the stub genesis config options
    */
-  public StubGenesisConfigOptions futureEipsTime(final long blockNumber) {
-    futureEipsTime = OptionalLong.of(blockNumber);
+  public StubGenesisConfigOptions futureEipsTime(final long timestamp) {
+    futureEipsTime = OptionalLong.of(timestamp);
     return this;
   }
 
   /**
    * Experimental EIPs Time block.
    *
-   * @param blockNumber the block number
+   * @param timestamp the block timestamp
    * @return the stub genesis config options
    */
-  public StubGenesisConfigOptions experimentalEipsTime(final long blockNumber) {
-    experimentalEipsTime = OptionalLong.of(blockNumber);
+  public StubGenesisConfigOptions experimentalEipsTime(final long timestamp) {
+    experimentalEipsTime = OptionalLong.of(timestamp);
     return this;
   }
 
@@ -683,6 +672,17 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
    */
   public StubGenesisConfigOptions baseFeePerGas(final long baseFeeOverride) {
     baseFeePerGas = Optional.of(Wei.of(baseFeeOverride));
+    return this;
+  }
+
+  /**
+   * Zero base fee per gas stub genesis config options.
+   *
+   * @param zeroBaseFee the zero base fee override
+   * @return the stub genesis config options
+   */
+  public StubGenesisConfigOptions zeroBaseFee(final boolean zeroBaseFee) {
+    this.zeroBaseFee = zeroBaseFee;
     return this;
   }
 
@@ -808,13 +808,13 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   /**
-   * Ecip 1049 stub genesis config options.
+   * Spiral stub genesis config options.
    *
    * @param blockNumber the block number
    * @return the stub genesis config options
    */
-  public StubGenesisConfigOptions ecip1049(final long blockNumber) {
-    ecip1049BlockNumber = OptionalLong.of(blockNumber);
+  public StubGenesisConfigOptions spiral(final long blockNumber) {
+    spiralBlockNumber = OptionalLong.of(blockNumber);
     return this;
   }
 

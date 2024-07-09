@@ -26,16 +26,17 @@ import org.hyperledger.besu.ethereum.mainnet.MainnetBlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.storage.StorageProvider;
 import org.hyperledger.besu.services.kvstore.InMemoryKeyValueStorage;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import javax.annotation.Nonnull;
 
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class InMemoryBackwardChainTest {
 
   public static final int HEIGHT = 20_000;
@@ -45,8 +46,9 @@ public class InMemoryBackwardChainTest {
   GenericKeyValueStorageFacade<Hash, BlockHeader> headersStorage;
   GenericKeyValueStorageFacade<Hash, Block> blocksStorage;
   GenericKeyValueStorageFacade<Hash, Hash> chainStorage;
+  GenericKeyValueStorageFacade<String, BlockHeader> sessionDataStorage;
 
-  @Before
+  @BeforeEach
   public void prepareData() {
     headersStorage =
         new GenericKeyValueStorageFacade<>(
@@ -61,6 +63,11 @@ public class InMemoryBackwardChainTest {
     chainStorage =
         new GenericKeyValueStorageFacade<>(
             Hash::toArrayUnsafe, new HashConvertor(), new InMemoryKeyValueStorage());
+    sessionDataStorage =
+        new GenericKeyValueStorageFacade<>(
+            key -> key.getBytes(StandardCharsets.UTF_8),
+            new BlocksHeadersConvertor(new MainnetBlockHeaderFunctions()),
+            new InMemoryKeyValueStorage());
 
     blocks = prepareChain(ELEMENTS, HEIGHT);
   }
@@ -78,7 +85,7 @@ public class InMemoryBackwardChainTest {
   @Nonnull
   private BackwardChain createChainFromBlock(final Block pivot) {
     final BackwardChain backwardChain =
-        new BackwardChain(headersStorage, blocksStorage, chainStorage);
+        new BackwardChain(headersStorage, blocksStorage, chainStorage, sessionDataStorage);
     backwardChain.appendTrustedBlock(pivot);
     return backwardChain;
   }

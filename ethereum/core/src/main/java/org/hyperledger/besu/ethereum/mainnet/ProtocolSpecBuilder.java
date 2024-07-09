@@ -25,7 +25,6 @@ import org.hyperledger.besu.ethereum.GasLimitCalculator;
 import org.hyperledger.besu.ethereum.chain.BadBlockManager;
 import org.hyperledger.besu.ethereum.core.BlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.core.BlockImporter;
-import org.hyperledger.besu.ethereum.core.GoQuorumPrivacyParameters;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.mainnet.feemarket.FeeMarket;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePrivacyPrecompiledContract;
@@ -46,7 +45,7 @@ import java.util.function.Supplier;
 
 public class ProtocolSpecBuilder {
   private Supplier<GasCalculator> gasCalculatorBuilder;
-  private GasLimitCalculator gasLimitCalculator;
+  private Function<FeeMarket, GasLimitCalculator> gasLimitCalculatorBuilder;
   private Wei blockReward;
   private boolean skipZeroBlockRewards;
   private BlockHeaderFunctions blockHeaderFunctions;
@@ -54,10 +53,10 @@ public class ProtocolSpecBuilder {
   private DifficultyCalculator difficultyCalculator;
   private EvmConfiguration evmConfiguration;
   private BiFunction<GasCalculator, EvmConfiguration, EVM> evmBuilder;
-  private Function<GasCalculator, MainnetTransactionValidator> transactionValidatorBuilder;
+  private TransactionValidatorFactoryBuilder transactionValidatorFactoryBuilder;
   private Function<FeeMarket, BlockHeaderValidator.Builder> blockHeaderValidatorBuilder;
   private Function<FeeMarket, BlockHeaderValidator.Builder> ommerHeaderValidatorBuilder;
-  private Function<HeaderBasedProtocolSchedule, BlockBodyValidator> blockBodyValidatorBuilder;
+  private Function<ProtocolSchedule, BlockBodyValidator> blockBodyValidatorBuilder;
   private BiFunction<GasCalculator, EVM, AbstractMessageProcessor> contractCreationProcessorBuilder;
   private Function<PrecompiledContractConfiguration, PrecompileContractRegistry>
       precompileContractRegistryBuilder;
@@ -76,17 +75,21 @@ public class ProtocolSpecBuilder {
       new WithdrawalsValidator.ProhibitedWithdrawals();
   private WithdrawalsProcessor withdrawalsProcessor;
 
+  private DepositsValidator depositsValidator = new DepositsValidator.ProhibitedDeposits();
   private FeeMarket feeMarket = FeeMarket.legacy();
   private BadBlockManager badBlockManager;
   private PoWHasher powHasher = PoWHasher.ETHASH_LIGHT;
+  private boolean isPoS = false;
+  private boolean isReplayProtectionSupported = false;
 
   public ProtocolSpecBuilder gasCalculator(final Supplier<GasCalculator> gasCalculatorBuilder) {
     this.gasCalculatorBuilder = gasCalculatorBuilder;
     return this;
   }
 
-  public ProtocolSpecBuilder gasLimitCalculator(final GasLimitCalculator gasLimitCalculator) {
-    this.gasLimitCalculator = gasLimitCalculator;
+  public ProtocolSpecBuilder gasLimitCalculatorBuilder(
+      final Function<FeeMarket, GasLimitCalculator> gasLimitCalculatorBuilder) {
+    this.gasLimitCalculatorBuilder = gasLimitCalculatorBuilder;
     return this;
   }
 
@@ -122,9 +125,9 @@ public class ProtocolSpecBuilder {
     return this;
   }
 
-  public ProtocolSpecBuilder transactionValidatorBuilder(
-      final Function<GasCalculator, MainnetTransactionValidator> transactionValidatorBuilder) {
-    this.transactionValidatorBuilder = transactionValidatorBuilder;
+  public ProtocolSpecBuilder transactionValidatorFactoryBuilder(
+      final TransactionValidatorFactoryBuilder transactionValidatorFactoryBuilder) {
+    this.transactionValidatorFactoryBuilder = transactionValidatorFactoryBuilder;
     return this;
   }
 
@@ -141,7 +144,7 @@ public class ProtocolSpecBuilder {
   }
 
   public ProtocolSpecBuilder blockBodyValidatorBuilder(
-      final Function<HeaderBasedProtocolSchedule, BlockBodyValidator> blockBodyValidatorBuilder) {
+      final Function<ProtocolSchedule, BlockBodyValidator> blockBodyValidatorBuilder) {
     this.blockBodyValidatorBuilder = blockBodyValidatorBuilder;
     return this;
   }
@@ -257,12 +260,28 @@ public class ProtocolSpecBuilder {
     return this;
   }
 
-  public ProtocolSpec build(final HeaderBasedProtocolSchedule protocolSchedule) {
+  public ProtocolSpecBuilder depositsValidator(final DepositsValidator depositsValidator) {
+    this.depositsValidator = depositsValidator;
+    return this;
+  }
+
+  public ProtocolSpecBuilder isPoS(final boolean isPoS) {
+    this.isPoS = isPoS;
+    return this;
+  }
+
+  public ProtocolSpecBuilder isReplayProtectionSupported(
+      final boolean isReplayProtectionSupported) {
+    this.isReplayProtectionSupported = isReplayProtectionSupported;
+    return this;
+  }
+
+  public ProtocolSpec build(final ProtocolSchedule protocolSchedule) {
     checkNotNull(gasCalculatorBuilder, "Missing gasCalculator");
-    checkNotNull(gasLimitCalculator, "Missing gasLimitCalculator");
+    checkNotNull(gasLimitCalculatorBuilder, "Missing gasLimitCalculatorBuilder");
     checkNotNull(evmBuilder, "Missing operation registry");
     checkNotNull(evmConfiguration, "Missing evm configuration");
-    checkNotNull(transactionValidatorBuilder, "Missing transaction validator");
+    checkNotNull(transactionValidatorFactoryBuilder, "Missing transaction validator");
     checkNotNull(privateTransactionValidatorBuilder, "Missing private transaction validator");
     checkNotNull(contractCreationProcessorBuilder, "Missing contract creation processor");
     checkNotNull(precompileContractRegistryBuilder, "Missing precompile contract registry");
@@ -286,11 +305,12 @@ public class ProtocolSpecBuilder {
     checkNotNull(badBlockManager, "Missing bad blocks manager");
 
     final GasCalculator gasCalculator = gasCalculatorBuilder.get();
+    final GasLimitCalculator gasLimitCalculator = gasLimitCalculatorBuilder.apply(feeMarket);
     final EVM evm = evmBuilder.apply(gasCalculator, evmConfiguration);
     final PrecompiledContractConfiguration precompiledContractConfiguration =
         new PrecompiledContractConfiguration(gasCalculator, privacyParameters);
-    final MainnetTransactionValidator transactionValidator =
-        transactionValidatorBuilder.apply(gasCalculator);
+    final TransactionValidatorFactory transactionValidatorFactory =
+        transactionValidatorFactoryBuilder.apply(gasCalculator, gasLimitCalculator, feeMarket);
     final AbstractMessageProcessor contractCreationProcessor =
         contractCreationProcessorBuilder.apply(gasCalculator, evm);
     final PrecompileContractRegistry precompileContractRegistry =
@@ -299,7 +319,11 @@ public class ProtocolSpecBuilder {
         messageCallProcessorBuilder.apply(evm, precompileContractRegistry);
     final MainnetTransactionProcessor transactionProcessor =
         transactionProcessorBuilder.apply(
-            gasCalculator, transactionValidator, contractCreationProcessor, messageCallProcessor);
+            gasCalculator,
+            feeMarket,
+            transactionValidatorFactory,
+            contractCreationProcessor,
+            messageCallProcessor);
 
     final BlockHeaderValidator blockHeaderValidator =
         createBlockHeaderValidator(blockHeaderValidatorBuilder);
@@ -313,7 +337,7 @@ public class ProtocolSpecBuilder {
     // Set private Tx Processor
     PrivateTransactionProcessor privateTransactionProcessor =
         createPrivateTransactionProcessor(
-            transactionValidator,
+            transactionValidatorFactory,
             contractCreationProcessor,
             messageCallProcessor,
             precompileContractRegistry);
@@ -332,16 +356,12 @@ public class ProtocolSpecBuilder {
 
     final BlockValidator blockValidator =
         blockValidatorBuilder.apply(
-            blockHeaderValidator,
-            blockBodyValidator,
-            blockProcessor,
-            badBlockManager,
-            privacyParameters.getGoQuorumPrivacyParameters());
+            blockHeaderValidator, blockBodyValidator, blockProcessor, badBlockManager);
     final BlockImporter blockImporter = blockImporterBuilder.apply(blockValidator);
     return new ProtocolSpec(
         name,
         evm,
-        transactionValidator,
+        transactionValidatorFactory,
         transactionProcessor,
         privateTransactionProcessor,
         blockHeaderValidator,
@@ -363,11 +383,14 @@ public class ProtocolSpecBuilder {
         badBlockManager,
         Optional.ofNullable(powHasher),
         withdrawalsValidator,
-        Optional.ofNullable(withdrawalsProcessor));
+        Optional.ofNullable(withdrawalsProcessor),
+        depositsValidator,
+        isPoS,
+        isReplayProtectionSupported);
   }
 
   private PrivateTransactionProcessor createPrivateTransactionProcessor(
-      final MainnetTransactionValidator transactionValidator,
+      final TransactionValidatorFactory transactionValidatorFactory,
       final AbstractMessageProcessor contractCreationProcessor,
       final AbstractMessageProcessor messageCallProcessor,
       final PrecompileContractRegistry precompileContractRegistry) {
@@ -377,7 +400,7 @@ public class ProtocolSpecBuilder {
           privateTransactionValidatorBuilder.apply();
       privateTransactionProcessor =
           privateTransactionProcessorBuilder.apply(
-              transactionValidator,
+              transactionValidatorFactory,
               contractCreationProcessor,
               messageCallProcessor,
               privateTransactionValidator);
@@ -403,14 +426,13 @@ public class ProtocolSpecBuilder {
 
   private BlockProcessor createBlockProcessor(
       final MainnetTransactionProcessor transactionProcessor,
-      final HeaderBasedProtocolSchedule protocolSchedule) {
+      final ProtocolSchedule protocolSchedule) {
     return blockProcessorBuilder.apply(
         transactionProcessor,
         transactionReceiptFactory,
         blockReward,
         miningBeneficiaryCalculator,
         skipZeroBlockRewards,
-        privacyParameters.getGoQuorumPrivacyParameters(),
         protocolSchedule);
   }
 
@@ -425,14 +447,15 @@ public class ProtocolSpecBuilder {
   public interface TransactionProcessorBuilder {
     MainnetTransactionProcessor apply(
         GasCalculator gasCalculator,
-        MainnetTransactionValidator transactionValidator,
+        FeeMarket feeMarket,
+        TransactionValidatorFactory transactionValidatorFactory,
         AbstractMessageProcessor contractCreationProcessor,
         AbstractMessageProcessor messageCallProcessor);
   }
 
   public interface PrivateTransactionProcessorBuilder {
     PrivateTransactionProcessor apply(
-        MainnetTransactionValidator transactionValidator,
+        TransactionValidatorFactory transactionValidatorFactory,
         AbstractMessageProcessor contractCreationProcessor,
         AbstractMessageProcessor messageCallProcessor,
         PrivateTransactionValidator privateTransactionValidator);
@@ -449,8 +472,7 @@ public class ProtocolSpecBuilder {
         Wei blockReward,
         MiningBeneficiaryCalculator miningBeneficiaryCalculator,
         boolean skipZeroBlockRewards,
-        Optional<GoQuorumPrivacyParameters> goQuorumPrivacyParameters,
-        HeaderBasedProtocolSchedule protocolSchedule);
+        ProtocolSchedule protocolSchedule);
   }
 
   public interface BlockValidatorBuilder {
@@ -458,11 +480,15 @@ public class ProtocolSpecBuilder {
         BlockHeaderValidator blockHeaderValidator,
         BlockBodyValidator blockBodyValidator,
         BlockProcessor blockProcessor,
-        BadBlockManager badBlockManager,
-        Optional<GoQuorumPrivacyParameters> goQuorumPrivacyParameters);
+        BadBlockManager badBlockManager);
   }
 
   public interface BlockImporterBuilder {
     BlockImporter apply(BlockValidator blockValidator);
+  }
+
+  public interface TransactionValidatorFactoryBuilder {
+    TransactionValidatorFactory apply(
+        GasCalculator gasCalculator, GasLimitCalculator gasLimitCalculator, FeeMarket feeMarket);
   }
 }

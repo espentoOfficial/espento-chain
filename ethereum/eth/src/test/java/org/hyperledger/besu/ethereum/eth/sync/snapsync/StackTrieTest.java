@@ -1,5 +1,5 @@
 /*
- * Copyright contributors to Hyperledger Besu
+ * Copyright Hyperledger Besu Contributors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -17,10 +17,10 @@ package org.hyperledger.besu.ethereum.eth.sync.snapsync;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.core.TrieGenerator;
 import org.hyperledger.besu.ethereum.proof.WorldStateProofProvider;
-import org.hyperledger.besu.ethereum.storage.keyvalue.WorldStateKeyValueStorage;
-import org.hyperledger.besu.ethereum.trie.MerklePatriciaTrie;
+import org.hyperledger.besu.ethereum.trie.MerkleTrie;
 import org.hyperledger.besu.ethereum.trie.RangeStorageEntriesCollector;
 import org.hyperledger.besu.ethereum.trie.TrieIterator;
+import org.hyperledger.besu.ethereum.trie.forest.storage.ForestWorldStateKeyValueStorage;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage;
 import org.hyperledger.besu.services.kvstore.InMemoryKeyValueStorage;
 
@@ -30,7 +30,7 @@ import java.util.TreeMap;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 import org.assertj.core.api.Assertions;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class StackTrieTest {
 
@@ -42,12 +42,12 @@ public class StackTrieTest {
     final int nbAccounts = 15;
 
     final WorldStateStorage worldStateStorage =
-        new WorldStateKeyValueStorage(new InMemoryKeyValueStorage());
+        new ForestWorldStateKeyValueStorage(new InMemoryKeyValueStorage());
 
     final WorldStateStorage recreatedWorldStateStorage =
-        new WorldStateKeyValueStorage(new InMemoryKeyValueStorage());
+        new ForestWorldStateKeyValueStorage(new InMemoryKeyValueStorage());
 
-    final MerklePatriciaTrie<Bytes, Bytes> accountStateTrie =
+    final MerkleTrie<Bytes, Bytes> accountStateTrie =
         TrieGenerator.generateTrie(worldStateStorage, nbAccounts);
 
     final StackTrie stackTrie =
@@ -94,12 +94,12 @@ public class StackTrieTest {
     final int nbAccounts = 15;
 
     final WorldStateStorage worldStateStorage =
-        new WorldStateKeyValueStorage(new InMemoryKeyValueStorage());
+        new ForestWorldStateKeyValueStorage(new InMemoryKeyValueStorage());
 
     final WorldStateStorage recreatedWorldStateStorage =
-        new WorldStateKeyValueStorage(new InMemoryKeyValueStorage());
+        new ForestWorldStateKeyValueStorage(new InMemoryKeyValueStorage());
 
-    final MerklePatriciaTrie<Bytes, Bytes> accountStateTrie =
+    final MerkleTrie<Bytes, Bytes> accountStateTrie =
         TrieGenerator.generateTrie(worldStateStorage, nbAccounts);
 
     final StackTrie stackTrie =

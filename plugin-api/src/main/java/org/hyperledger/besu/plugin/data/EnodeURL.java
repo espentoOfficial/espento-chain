@@ -58,7 +58,7 @@ public interface EnodeURL {
   int getListeningPortOrZero();
 
   /**
-   * Enode To URI .
+   * Enode To URI.
    *
    * @return the uri
    */
@@ -98,4 +98,11 @@ public interface EnodeURL {
    * @return the discovery port or zero
    */
   int getDiscoveryPortOrZero();
+
+  /**
+   * Gets the host.
+   *
+   * @return the host
+   */
+  String getHost();
 }

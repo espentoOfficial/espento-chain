@@ -16,10 +16,8 @@ package org.hyperledger.besu.ethereum.p2p.discovery;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.tuweni.bytes.Bytes.wrapBuffer;
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.debugLambda;
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.traceLambda;
 
-import org.hyperledger.besu.crypto.NodeKey;
+import org.hyperledger.besu.cryptoservices.NodeKey;
 import org.hyperledger.besu.ethereum.forkid.ForkIdManager;
 import org.hyperledger.besu.ethereum.p2p.config.DiscoveryConfiguration;
 import org.hyperledger.besu.ethereum.p2p.discovery.internal.Packet;
@@ -55,6 +53,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.datagram.DatagramPacket;
 import io.vertx.core.datagram.DatagramSocket;
 import io.vertx.core.datagram.DatagramSocketOptions;
+import org.ethereum.beacon.discovery.util.DecodeException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -210,13 +209,13 @@ public class VertxPeerDiscoveryAgent extends PeerDiscoveryAgent {
     if (err instanceof NativeIoException) {
       final var nativeErr = (NativeIoException) err;
       if (nativeErr.expectedErr() == Errors.ERROR_ENETUNREACH_NEGATIVE) {
-        debugLambda(
-            LOG,
-            "Peer {} is unreachable, native error code {}, packet: {}, stacktrace: {}",
-            peer::toString,
-            nativeErr::expectedErr,
-            () -> wrapBuffer(packet.encode()),
-            err::toString);
+        LOG.atDebug()
+            .setMessage("Peer {} is unreachable, native error code {}, packet: {}, stacktrace: {}")
+            .addArgument(peer)
+            .addArgument(nativeErr::expectedErr)
+            .addArgument(() -> wrapBuffer(packet.encode()))
+            .addArgument(err)
+            .log();
       } else {
         LOG.warn(
             "Sending to peer {} failed, native error code {}, packet: {}, stacktrace: {}",
@@ -226,12 +225,12 @@ public class VertxPeerDiscoveryAgent extends PeerDiscoveryAgent {
             err);
       }
     } else if (err instanceof SocketException && err.getMessage().contains("unreachable")) {
-      debugLambda(
-          LOG,
-          "Peer {} is unreachable, packet: {}",
-          peer::toString,
-          () -> wrapBuffer(packet.encode()),
-          err::toString);
+      LOG.atDebug()
+          .setMessage("Peer {} is unreachable, packet: {}")
+          .addArgument(peer)
+          .addArgument(() -> wrapBuffer(packet.encode()))
+          .addArgument(err)
+          .log();
     } else if (err instanceof SocketException
         && err.getMessage().contentEquals("Operation not permitted")) {
       LOG.debug(
@@ -243,12 +242,12 @@ public class VertxPeerDiscoveryAgent extends PeerDiscoveryAgent {
           "Unsupported address type exception when connecting to peer {}, this is likely due to ipv6 not being enabled at runtime. "
               + "Set logging level to TRACE to see full stacktrace",
           peer);
-      traceLambda(
-          LOG,
-          "Sending to peer {} failed, packet: {}, stacktrace: {}",
-          peer::toString,
-          () -> wrapBuffer(packet.encode()),
-          err::toString);
+      LOG.atTrace()
+          .setMessage("Sending to peer {} failed, packet: {}, stacktrace: {}")
+          .addArgument(peer)
+          .addArgument(() -> wrapBuffer(packet.encode()))
+          .addArgument(err)
+          .log();
     } else {
       LOG.warn(
           "Sending to peer {} failed, packet: {}, stacktrace: {}",
@@ -264,7 +263,7 @@ public class VertxPeerDiscoveryAgent extends PeerDiscoveryAgent {
    * @param exception the exception that was raised
    */
   private void handleException(final Throwable exception) {
-    if (exception instanceof IOException) {
+    if (exception instanceof IOException || exception instanceof DecodeException) {
       LOG.debug("Packet handler exception", exception);
     } else {
       LOG.error("Packet handler exception", exception);
@@ -298,7 +297,8 @@ public class VertxPeerDiscoveryAgent extends PeerDiscoveryAgent {
             final Endpoint endpoint = new Endpoint(host, port, Optional.empty());
             handleIncomingPacket(endpoint, event.result());
           } else {
-            if (event.cause() instanceof PeerDiscoveryPacketDecodingException) {
+            if (event.cause() instanceof PeerDiscoveryPacketDecodingException
+                || event.cause() instanceof DecodeException) {
               LOG.debug(
                   "Discarding invalid peer discovery packet: {}, {}",
                   event.cause().getMessage(),

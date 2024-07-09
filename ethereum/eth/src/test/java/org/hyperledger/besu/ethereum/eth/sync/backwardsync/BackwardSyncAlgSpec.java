@@ -41,18 +41,21 @@ import java.util.concurrent.TimeUnit;
 import javax.annotation.Nonnull;
 
 import org.apache.tuweni.bytes.Bytes;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Answers;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 public class BackwardSyncAlgSpec {
 
   public static final int REMOTE_HEIGHT = 50;
@@ -66,13 +69,13 @@ public class BackwardSyncAlgSpec {
   @Captor ArgumentCaptor<BesuEvents.TTDReachedListener> ttdCaptor;
   @Captor ArgumentCaptor<BesuEvents.InitialSyncCompletionListener> completionCaptor;
 
-  @InjectMocks BackwardsSyncAlgorithm algorithm;
+  @InjectMocks BackwardSyncAlgorithm algorithm;
   @Mock private Hash hash;
 
   private static final BlockDataGenerator blockDataGenerator = new BlockDataGenerator();
   private Block genesisBlock;
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     BlockDataGenerator blockDataGenerator = new BlockDataGenerator();
     genesisBlock = blockDataGenerator.genesisBlock();
@@ -95,7 +98,7 @@ public class BackwardSyncAlgSpec {
 
     algorithm =
         Mockito.spy(
-            new BackwardsSyncAlgorithm(
+            new BackwardSyncAlgorithm(
                 context,
                 FinalBlockConfirmation.confirmationChain(
                     FinalBlockConfirmation.genesisConfirmation(localBlockchain),
@@ -162,7 +165,7 @@ public class BackwardSyncAlgSpec {
 
     ttdCaptor.getValue().onTTDReached(true);
 
-    voidCompletableFuture.get(100, TimeUnit.MILLISECONDS);
+    voidCompletableFuture.get(200, TimeUnit.MILLISECONDS);
     assertThat(voidCompletableFuture).isCompleted();
 
     verify(context.getSyncState()).unsubscribeTTDReached(88L);
@@ -189,7 +192,7 @@ public class BackwardSyncAlgSpec {
 
     completionCaptor.getValue().onInitialSyncCompleted();
 
-    voidCompletableFuture.get(100, TimeUnit.MILLISECONDS);
+    voidCompletableFuture.get(200, TimeUnit.MILLISECONDS);
     assertThat(voidCompletableFuture).isCompleted();
 
     verify(context.getSyncState()).unsubscribeTTDReached(88L);
@@ -292,7 +295,7 @@ public class BackwardSyncAlgSpec {
     doReturn(backwardChain).when(context).getBackwardChain();
     algorithm =
         Mockito.spy(
-            new BackwardsSyncAlgorithm(
+            new BackwardSyncAlgorithm(
                 context, FinalBlockConfirmation.genesisConfirmation(otherLocalBlockchain)));
     assertThatThrownBy(() -> algorithm.pickNextStep())
         .isInstanceOf(BackwardSyncException.class)

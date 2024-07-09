@@ -26,10 +26,11 @@ import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateWorldStateReader;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivacyStorageProvider;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateStateStorage;
-import org.hyperledger.besu.ethereum.worldstate.DefaultWorldStateArchive;
+import org.hyperledger.besu.ethereum.trie.forest.ForestWorldStateArchive;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.ethereum.worldstate.WorldStatePreimageStorage;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage;
+import org.hyperledger.besu.evm.internal.EvmConfiguration;
 import org.hyperledger.besu.plugin.services.PrivacyPluginService;
 import org.hyperledger.besu.plugin.services.privacy.PrivacyGroupGenesisProvider;
 
@@ -75,7 +76,6 @@ public class PrivacyParameters {
   private boolean privacyPluginEnabled;
   private PrivateStateRootResolver privateStateRootResolver;
   private PrivateWorldStateReader privateWorldStateReader;
-  private Optional<GoQuorumPrivacyParameters> goQuorumPrivacyParameters = Optional.empty();
   private PrivacyPluginService privacyPluginService;
 
   public Address getPrivacyAddress() {
@@ -202,16 +202,6 @@ public class PrivacyParameters {
     this.privateWorldStateReader = privateWorldStateReader;
   }
 
-  public Optional<GoQuorumPrivacyParameters> getGoQuorumPrivacyParameters() {
-    return goQuorumPrivacyParameters;
-  }
-
-  private void setGoQuorumPrivacyParameters(
-      final Optional<GoQuorumPrivacyParameters> goQuorumPrivacyParameters) {
-    this.goQuorumPrivacyParameters =
-        goQuorumPrivacyParameters != null ? goQuorumPrivacyParameters : Optional.empty();
-  }
-
   private void setPrivacyService(final PrivacyPluginService privacyPluginService) {
     this.privacyPluginService = privacyPluginService;
   }
@@ -272,7 +262,6 @@ public class PrivacyParameters {
     private Path privacyTlsKnownEnclaveFile;
     private boolean flexiblePrivacyGroupsEnabled;
     private boolean privacyPluginEnabled;
-    private Optional<GoQuorumPrivacyParameters> goQuorumPrivacyParameters;
     private PrivacyPluginService privacyPluginService;
 
     public Builder setEnclaveUrl(final URI enclaveUrl) {
@@ -330,12 +319,6 @@ public class PrivacyParameters {
       return this;
     }
 
-    public Builder setGoQuorumPrivacyParameters(
-        final Optional<GoQuorumPrivacyParameters> goQuorumPrivacyParameters) {
-      this.goQuorumPrivacyParameters = goQuorumPrivacyParameters;
-      return this;
-    }
-
     public Builder setPrivacyUserIdUsingFile(final File publicKeyFile) throws IOException {
       this.enclavePublicKeyFile = publicKeyFile;
       this.privacyUserId = Files.asCharSource(publicKeyFile, UTF_8).read();
@@ -357,7 +340,8 @@ public class PrivacyParameters {
         final WorldStatePreimageStorage privatePreimageStorage =
             storageProvider.createWorldStatePreimageStorage();
         final WorldStateArchive privateWorldStateArchive =
-            new DefaultWorldStateArchive(privateWorldStateStorage, privatePreimageStorage);
+            new ForestWorldStateArchive(
+                privateWorldStateStorage, privatePreimageStorage, EvmConfiguration.DEFAULT);
 
         final PrivateStateStorage privateStateStorage = storageProvider.createPrivateStateStorage();
         final PrivateStateRootResolver privateStateRootResolver =
@@ -398,7 +382,6 @@ public class PrivacyParameters {
       config.setMultiTenancyEnabled(multiTenancyEnabled);
       config.setFlexiblePrivacyGroupsEnabled(flexiblePrivacyGroupsEnabled);
       config.setPrivacyPluginEnabled(privacyPluginEnabled);
-      config.setGoQuorumPrivacyParameters(goQuorumPrivacyParameters);
       return config;
     }
   }

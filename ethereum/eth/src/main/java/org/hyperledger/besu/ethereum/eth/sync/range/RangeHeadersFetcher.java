@@ -97,7 +97,7 @@ public class RangeHeadersFetcher {
       final BlockHeader referenceHeader,
       final int headerCount,
       final int skip) {
-    LOG.debug(
+    LOG.trace(
         "Requesting {} range headers, starting from {}, {} blocks apart",
         headerCount,
         referenceHeader.getNumber(),
@@ -106,6 +106,7 @@ public class RangeHeadersFetcher {
             protocolSchedule,
             ethContext,
             referenceHeader.getHash(),
+            referenceHeader.getNumber(),
             // + 1 because lastHeader will be returned as well.
             headerCount + 1,
             skip,

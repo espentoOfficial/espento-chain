@@ -82,15 +82,6 @@ public class GenesisConfigFile {
   }
 
   /**
-   * Ecip 1049 dev genesis config file.
-   *
-   * @return the genesis config file
-   */
-  public static GenesisConfigFile ecip1049dev() {
-    return genesisFileFromResources("/ecip1049_dev.json");
-  }
-
-  /**
    * Genesis file from resources genesis config file.
    *
    * @param resourceName the resource name
@@ -254,6 +245,36 @@ public class GenesisConfigFile {
    */
   public String getNonce() {
     return JsonUtil.getValueAsString(configRoot, "nonce", "0x0");
+  }
+
+  /**
+   * Gets excess blob gas.
+   *
+   * @return the excess blob gas
+   */
+  public String getExcessBlobGas() {
+    return JsonUtil.getValueAsString(configRoot, "excessblobgas", "0x0");
+  }
+
+  /**
+   * Gets blob gas used.
+   *
+   * @return the blob gas used
+   */
+  public String getBlobGasUsed() {
+    return JsonUtil.getValueAsString(configRoot, "blobgasused", "0x0");
+  }
+
+  /**
+   * Gets parent beacon block root.
+   *
+   * @return the parent beacon block root
+   */
+  public String getParentBeaconBlockRoot() {
+    return JsonUtil.getValueAsString(
+        configRoot,
+        "parentbeaconblockroot",
+        "0x0000000000000000000000000000000000000000000000000000000000000000");
   }
 
   /**

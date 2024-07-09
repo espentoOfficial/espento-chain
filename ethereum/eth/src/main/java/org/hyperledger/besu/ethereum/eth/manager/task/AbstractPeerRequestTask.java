@@ -85,10 +85,6 @@ public abstract class AbstractPeerRequestTask<R> extends AbstractPeerTask<R> {
         });
   }
 
-  public PendingPeerRequest sendRequestToPeer(final PeerRequest request) {
-    return sendRequestToPeer(request, 0L);
-  }
-
   public PendingPeerRequest sendRequestToPeer(
       final PeerRequest request, final long minimumBlockNumber) {
     return ethContext.getEthPeers().executePeerRequest(request, minimumBlockNumber, assignedPeer);
@@ -112,7 +108,11 @@ public abstract class AbstractPeerRequestTask<R> extends AbstractPeerTask<R> {
           });
     } catch (final RLPException e) {
       // Peer sent us malformed data - disconnect
-      LOG.debug("Disconnecting with BREACH_OF_PROTOCOL due to malformed message: {}", peer, e);
+      LOG.debug(
+          "Disconnecting with BREACH_OF_PROTOCOL due to malformed message: {}",
+          peer.getShortNodeId(),
+          e);
+      LOG.trace("Peer {} Malformed message data: {}", peer, message.getData());
       peer.disconnect(DisconnectReason.BREACH_OF_PROTOCOL);
       promise.completeExceptionally(new PeerBreachedProtocolException());
     }

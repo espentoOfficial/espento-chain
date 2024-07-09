@@ -23,6 +23,8 @@ import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.operation.Operation;
 
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -35,24 +37,63 @@ import org.apache.tuweni.units.bigints.UInt256;
 public class StandardJsonTracer implements OperationTracer {
 
   private static final Joiner commaJoiner = Joiner.on(',');
-  private final PrintStream out;
+  private final PrintWriter out;
   private final boolean showMemory;
+  private final boolean showStack;
+  private final boolean showReturnData;
+  private final boolean showStorage;
   private int pc;
   private int section;
   private List<String> stack;
   private String gas;
   private Bytes memory;
   private int memorySize;
+  private int depth;
+  private String storageString;
 
   /**
    * Instantiates a new Standard json tracer.
    *
    * @param out the out
-   * @param showMemory the show memory
+   * @param showMemory show memory in trace lines
+   * @param showStack show the stack in trace lines
+   * @param showReturnData show return data in trace lines
+   * @param showStorage show the updated storage
    */
-  public StandardJsonTracer(final PrintStream out, final boolean showMemory) {
+  public StandardJsonTracer(
+      final PrintWriter out,
+      final boolean showMemory,
+      final boolean showStack,
+      final boolean showReturnData,
+      final boolean showStorage) {
     this.out = out;
     this.showMemory = showMemory;
+    this.showStack = showStack;
+    this.showReturnData = showReturnData;
+    this.showStorage = showStorage;
+  }
+
+  /**
+   * Instantiates a new Standard json tracer.
+   *
+   * @param out the out
+   * @param showMemory show memory in trace lines
+   * @param showStack show the stack in trace lines
+   * @param showReturnData show return data in trace lines
+   * @param showStorage show updated storage
+   */
+  public StandardJsonTracer(
+      final PrintStream out,
+      final boolean showMemory,
+      final boolean showStack,
+      final boolean showReturnData,
+      final boolean showStorage) {
+    this(
+        new PrintWriter(out, true, StandardCharsets.UTF_8),
+        showMemory,
+        showStack,
+        showReturnData,
+        showStorage);
   }
 
   /**
@@ -85,24 +126,54 @@ public class StandardJsonTracer implements OperationTracer {
     for (int i = messageFrame.stackSize() - 1; i >= 0; i--) {
       stack.add("\"" + shortBytes(messageFrame.getStackItem(i)) + "\"");
     }
-    pc =
-        messageFrame.getPC()
-            - messageFrame.getCode().getCodeSection(messageFrame.getSection()).getEntryPoint();
+    pc = messageFrame.getPC() - messageFrame.getCode().getCodeSection(0).getEntryPoint();
     section = messageFrame.getSection();
     gas = shortNumber(messageFrame.getRemainingGas());
     memorySize = messageFrame.memoryWordSize() * 32;
-    if (showMemory) {
+    if (showMemory && memorySize > 0) {
       memory = messageFrame.readMemory(0, messageFrame.memoryWordSize() * 32L);
+    } else {
+      memory = null;
     }
+    depth = messageFrame.getMessageStackSize();
+
+    StringBuilder sb = new StringBuilder();
+    if (showStorage) {
+      var updater = messageFrame.getWorldUpdater();
+      var account = updater.getAccount(messageFrame.getRecipientAddress());
+      if (account != null && !account.getUpdatedStorage().isEmpty()) {
+        boolean[] shownEntry = {false};
+        sb.append(",\"storage\":{");
+        account
+            .getUpdatedStorage()
+            .forEach(
+                (k, v) -> {
+                  if (shownEntry[0]) {
+                    sb.append(",");
+                  } else {
+                    shownEntry[0] = true;
+                  }
+                  sb.append("\"")
+                      .append(k.toQuantityHexString())
+                      .append("\":\"")
+                      .append(v.toQuantityHexString())
+                      .append("\"");
+                });
+        sb.append("}");
+      }
+    }
+    storageString = sb.toString();
   }
 
   @Override
   public void tracePostExecution(
       final MessageFrame messageFrame, final Operation.OperationResult executeResult) {
     final Operation currentOp = messageFrame.getCurrentOperation();
+    if (currentOp.isVirtualOperation()) {
+      return;
+    }
     final int opcode = currentOp.getOpcode();
     final Bytes returnData = messageFrame.getReturnData();
-    final int depth = messageFrame.getMessageStackDepth() + 1;
 
     final StringBuilder sb = new StringBuilder(1024);
     sb.append("{");
@@ -113,21 +184,30 @@ public class StandardJsonTracer implements OperationTracer {
     sb.append("\"op\":").append(opcode).append(",");
     sb.append("\"gas\":\"").append(gas).append("\",");
     sb.append("\"gasCost\":\"").append(shortNumber(executeResult.getGasCost())).append("\",");
-    if (showMemory) {
+    if (memory != null) {
       sb.append("\"memory\":\"").append(memory.toHexString()).append("\",");
     }
     sb.append("\"memSize\":").append(memorySize).append(",");
-    sb.append("\"stack\":[").append(commaJoiner.join(stack)).append("],");
-    sb.append("\"returnData\":\"").append(returnData.toHexString()).append("\",");
+    if (showStack) {
+      sb.append("\"stack\":[").append(commaJoiner.join(stack)).append("],");
+    }
+    if (showReturnData && !returnData.isEmpty()) {
+      sb.append("\"returnData\":\"").append(returnData.toHexString()).append("\",");
+    }
     sb.append("\"depth\":").append(depth).append(",");
     sb.append("\"refund\":").append(messageFrame.getGasRefund()).append(",");
-    sb.append("\"opName\":\"").append(currentOp.getName()).append("\",");
-    sb.append("\"error\":\"")
-        .append(
-            executeResult.getHaltReason() == null
-                ? (quoteEscape(messageFrame.getRevertReason().orElse(Bytes.EMPTY)))
-                : executeResult.getHaltReason().getDescription())
-        .append("\"}");
+    sb.append("\"opName\":\"").append(currentOp.getName()).append("\"");
+    if (executeResult.getHaltReason() != null) {
+      sb.append(",\"error\":\"")
+          .append(executeResult.getHaltReason().getDescription())
+          .append("\"");
+    } else if (messageFrame.getRevertReason().isPresent()) {
+      sb.append(",\"error\":\"")
+          .append(quoteEscape(messageFrame.getRevertReason().orElse(Bytes.EMPTY)))
+          .append("\"");
+    }
+
+    sb.append(storageString).append("}");
     out.println(sb);
   }
 

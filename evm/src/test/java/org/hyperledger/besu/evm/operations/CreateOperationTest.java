@@ -33,15 +33,15 @@ import org.hyperledger.besu.evm.frame.BlockValues;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.ConstantinopleGasCalculator;
 import org.hyperledger.besu.evm.internal.EvmConfiguration;
+import org.hyperledger.besu.evm.internal.Words;
 import org.hyperledger.besu.evm.log.Log;
 import org.hyperledger.besu.evm.operation.CreateOperation;
 import org.hyperledger.besu.evm.processor.ContractCreationProcessor;
 import org.hyperledger.besu.evm.testutils.TestMessageFrameBuilder;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
-import org.hyperledger.besu.evm.worldstate.WrappedEvmAccount;
 
-import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -52,10 +52,8 @@ import org.junit.jupiter.api.Test;
 class CreateOperationTest {
 
   private final WorldUpdater worldUpdater = mock(WorldUpdater.class);
-  private final WrappedEvmAccount account = mock(WrappedEvmAccount.class);
-  private final WrappedEvmAccount newAccount = mock(WrappedEvmAccount.class);
-  private final MutableAccount mutableAccount = mock(MutableAccount.class);
-  private final MutableAccount newMutableAccount = mock(MutableAccount.class);
+  private final MutableAccount account = mock(MutableAccount.class);
+  private final MutableAccount newAccount = mock(MutableAccount.class);
   private final CreateOperation operation =
       new CreateOperation(new ConstantinopleGasCalculator(), Integer.MAX_VALUE);
   private final CreateOperation maxInitCodeOperation =
@@ -88,24 +86,20 @@ class CreateOperationTest {
     // Given:  Execute a CREATE operation with a contract that logs in the constructor
     final UInt256 memoryOffset = UInt256.fromHexString("0xFF");
     final UInt256 memoryLength = UInt256.valueOf(SIMPLE_CREATE.size());
-    final ArrayDeque<MessageFrame> messageFrameStack = new ArrayDeque<>();
-    final MessageFrame messageFrame =
-        testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1, messageFrameStack);
+    final MessageFrame messageFrame = testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1);
 
-    when(account.getMutable()).thenReturn(mutableAccount);
     when(account.getNonce()).thenReturn(55L);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
     when(worldUpdater.getAccount(any())).thenReturn(account);
     when(worldUpdater.get(any())).thenReturn(account);
     when(worldUpdater.getSenderAccount(any())).thenReturn(account);
     when(worldUpdater.getOrCreate(any())).thenReturn(newAccount);
-    when(newAccount.getMutable()).thenReturn(newMutableAccount);
-    when(newMutableAccount.getCode()).thenReturn(Bytes.EMPTY);
+    when(newAccount.getCode()).thenReturn(Bytes.EMPTY);
     when(worldUpdater.updater()).thenReturn(worldUpdater);
 
     final EVM evm = MainnetEVMs.london(EvmConfiguration.DEFAULT);
     operation.execute(messageFrame, evm);
-    final MessageFrame createFrame = messageFrameStack.peek();
+    final MessageFrame createFrame = messageFrame.getMessageFrameStack().peek();
     final ContractCreationProcessor ccp =
         new ContractCreationProcessor(evm.getGasCalculator(), evm, false, List.of(), 0, List.of());
     ccp.process(createFrame, OperationTracer.NO_TRACING);
@@ -129,84 +123,74 @@ class CreateOperationTest {
   void nonceTooLarge() {
     final UInt256 memoryOffset = UInt256.fromHexString("0xFF");
     final UInt256 memoryLength = UInt256.valueOf(SIMPLE_CREATE.size());
-    final ArrayDeque<MessageFrame> messageFrameStack = new ArrayDeque<>();
-    final MessageFrame messageFrame =
-        testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1, messageFrameStack);
+    final MessageFrame messageFrame = testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1);
 
     when(worldUpdater.getAccount(any())).thenReturn(account);
-    when(account.getMutable()).thenReturn(mutableAccount);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
-    when(mutableAccount.getNonce()).thenReturn(-1L);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getNonce()).thenReturn(-1L);
 
     final EVM evm = MainnetEVMs.london(EvmConfiguration.DEFAULT);
     operation.execute(messageFrame, evm);
 
-    assertThat(messageFrame.getStackItem(0)).isEqualTo(UInt256.ZERO);
+    assertThat(messageFrame.getStackItem(0).trimLeadingZeros()).isEqualTo(Bytes.EMPTY);
   }
 
   @Test
   void messageFrameStackTooDeep() {
     final UInt256 memoryOffset = UInt256.fromHexString("0xFF");
     final UInt256 memoryLength = UInt256.valueOf(SIMPLE_CREATE.size());
-    final ArrayDeque<MessageFrame> messageFrameStack = new ArrayDeque<>();
     final MessageFrame messageFrame =
-        testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1025, messageFrameStack);
+        testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1025);
 
     when(worldUpdater.getAccount(any())).thenReturn(account);
-    when(account.getMutable()).thenReturn(mutableAccount);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
-    when(mutableAccount.getNonce()).thenReturn(55L);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getNonce()).thenReturn(55L);
 
     final EVM evm = MainnetEVMs.london(EvmConfiguration.DEFAULT);
     operation.execute(messageFrame, evm);
 
-    assertThat(messageFrame.getStackItem(0)).isEqualTo(UInt256.ZERO);
+    assertThat(messageFrame.getStackItem(0).trimLeadingZeros()).isEqualTo(Bytes.EMPTY);
   }
 
   @Test
   void notEnoughValue() {
     final UInt256 memoryOffset = UInt256.fromHexString("0xFF");
     final UInt256 memoryLength = UInt256.valueOf(SIMPLE_CREATE.size());
-    final ArrayDeque<MessageFrame> messageFrameStack = new ArrayDeque<>();
     final MessageFrame messageFrame =
-        testMemoryFrame(memoryOffset, memoryLength, UInt256.valueOf(1), 1, messageFrameStack);
+        testMemoryFrame(memoryOffset, memoryLength, UInt256.valueOf(1), 1);
+    final Deque<MessageFrame> messageFrameStack = messageFrame.getMessageFrameStack();
     for (int i = 0; i < 1025; i++) {
       messageFrameStack.add(messageFrame);
     }
 
     when(worldUpdater.getAccount(any())).thenReturn(account);
-    when(account.getMutable()).thenReturn(mutableAccount);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
-    when(mutableAccount.getNonce()).thenReturn(55L);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getNonce()).thenReturn(55L);
 
     final EVM evm = MainnetEVMs.london(EvmConfiguration.DEFAULT);
     operation.execute(messageFrame, evm);
 
-    assertThat(messageFrame.getStackItem(0)).isEqualTo(UInt256.ZERO);
+    assertThat(messageFrame.getStackItem(0).trimLeadingZeros()).isEqualTo(Bytes.EMPTY);
   }
 
   @Test
   void shanghaiMaxInitCodeSizeCreate() {
     final UInt256 memoryOffset = UInt256.fromHexString("0xFF");
     final UInt256 memoryLength = UInt256.fromHexString("0xc000");
-    final ArrayDeque<MessageFrame> messageFrameStack = new ArrayDeque<>();
-    final MessageFrame messageFrame =
-        testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1, messageFrameStack);
+    final MessageFrame messageFrame = testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1);
 
-    when(account.getMutable()).thenReturn(mutableAccount);
     when(account.getNonce()).thenReturn(55L);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
     when(worldUpdater.getAccount(any())).thenReturn(account);
     when(worldUpdater.get(any())).thenReturn(account);
     when(worldUpdater.getSenderAccount(any())).thenReturn(account);
     when(worldUpdater.getOrCreate(any())).thenReturn(newAccount);
-    when(newAccount.getMutable()).thenReturn(newMutableAccount);
-    when(newMutableAccount.getCode()).thenReturn(Bytes.EMPTY);
+    when(newAccount.getCode()).thenReturn(Bytes.EMPTY);
     when(worldUpdater.updater()).thenReturn(worldUpdater);
 
     final EVM evm = MainnetEVMs.shanghai(DEV_NET_CHAIN_ID, EvmConfiguration.DEFAULT);
     var result = maxInitCodeOperation.execute(messageFrame, evm);
-    final MessageFrame createFrame = messageFrameStack.peek();
+    final MessageFrame createFrame = messageFrame.getMessageFrameStack().peek();
     final ContractCreationProcessor ccp =
         new ContractCreationProcessor(evm.getGasCalculator(), evm, false, List.of(), 0, List.of());
     ccp.process(createFrame, OperationTracer.NO_TRACING);
@@ -221,19 +205,15 @@ class CreateOperationTest {
   void shanghaiMaxInitCodeSizePlus1Create() {
     final UInt256 memoryOffset = UInt256.fromHexString("0xFF");
     final UInt256 memoryLength = UInt256.fromHexString("0xc001");
-    final ArrayDeque<MessageFrame> messageFrameStack = new ArrayDeque<>();
-    final MessageFrame messageFrame =
-        testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1, messageFrameStack);
+    final MessageFrame messageFrame = testMemoryFrame(memoryOffset, memoryLength, UInt256.ZERO, 1);
 
-    when(account.getMutable()).thenReturn(mutableAccount);
     when(account.getNonce()).thenReturn(55L);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
     when(worldUpdater.getAccount(any())).thenReturn(account);
     when(worldUpdater.get(any())).thenReturn(account);
     when(worldUpdater.getSenderAccount(any())).thenReturn(account);
     when(worldUpdater.getOrCreate(any())).thenReturn(newAccount);
-    when(newAccount.getMutable()).thenReturn(newMutableAccount);
-    when(newMutableAccount.getCode()).thenReturn(Bytes.EMPTY);
+    when(newAccount.getCode()).thenReturn(Bytes.EMPTY);
     when(worldUpdater.updater()).thenReturn(worldUpdater);
 
     final EVM evm = MainnetEVMs.shanghai(DEV_NET_CHAIN_ID, EvmConfiguration.DEFAULT);
@@ -255,14 +235,13 @@ class CreateOperationTest {
             .build();
     messageFrame.writeMemory(memoryOffset.toLong(), memoryLength.toLong(), SIMPLE_CREATE);
 
-    when(account.getMutable()).thenReturn(mutableAccount);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
     when(worldUpdater.getAccount(any())).thenReturn(account);
 
     final EVM evm = MainnetEVMs.cancun(DEV_NET_CHAIN_ID, EvmConfiguration.DEFAULT);
     var result = operation.execute(messageFrame, evm);
     assertThat(result.getHaltReason()).isNull();
-    assertThat(messageFrame.getStackItem(0)).isEqualTo(UInt256.ZERO);
+    assertThat(messageFrame.getStackItem(0).trimLeadingZeros()).isEqualTo(Bytes.EMPTY);
   }
 
   @Test
@@ -279,9 +258,8 @@ class CreateOperationTest {
             .build();
     messageFrame.writeMemory(memoryOffset.toLong(), memoryLength.toLong(), SIMPLE_EOF);
 
-    when(account.getMutable()).thenReturn(mutableAccount);
     when(account.getNonce()).thenReturn(55L);
-    when(mutableAccount.getBalance()).thenReturn(Wei.ZERO);
+    when(account.getBalance()).thenReturn(Wei.ZERO);
     when(worldUpdater.getAccount(any())).thenReturn(account);
     when(worldUpdater.get(any())).thenReturn(account);
     when(worldUpdater.getSenderAccount(any())).thenReturn(account);
@@ -290,7 +268,7 @@ class CreateOperationTest {
     final EVM evm = MainnetEVMs.cancun(DEV_NET_CHAIN_ID, EvmConfiguration.DEFAULT);
     var result = operation.execute(messageFrame, evm);
     assertThat(result.getHaltReason()).isNull();
-    assertThat(messageFrame.getStackItem(0)).isNotEqualTo(UInt256.ZERO);
+    assertThat(messageFrame.getState()).isEqualTo(MessageFrame.State.CODE_SUSPENDED);
   }
 
   @NotNull
@@ -298,8 +276,7 @@ class CreateOperationTest {
       final UInt256 memoryOffset,
       final UInt256 memoryLength,
       final UInt256 value,
-      final int depth,
-      final ArrayDeque<MessageFrame> messageFrameStack) {
+      final int depth) {
     final MessageFrame messageFrame =
         MessageFrame.builder()
             .type(MessageFrame.Type.CONTRACT_CREATION)
@@ -309,13 +286,11 @@ class CreateOperationTest {
             .value(Wei.ZERO)
             .apparentValue(Wei.ZERO)
             .code(CodeFactory.createCode(SIMPLE_CREATE, 0, true))
-            .depth(depth)
             .completer(__ -> {})
             .address(Address.fromHexString(SENDER))
-            .blockHashLookup(n -> Hash.hash(Bytes.ofUnsignedLong(n)))
+            .blockHashLookup(n -> Hash.hash(Words.longBytes(n)))
             .blockValues(mock(BlockValues.class))
             .gasPrice(Wei.ZERO)
-            .messageFrameStack(messageFrameStack)
             .miningBeneficiary(Address.ZERO)
             .originator(Address.ZERO)
             .initialGas(100000L)
@@ -327,6 +302,10 @@ class CreateOperationTest {
     messageFrame.expandMemory(0, 500);
     messageFrame.writeMemory(
         memoryOffset.trimLeadingZeros().toInt(), SIMPLE_CREATE.size(), SIMPLE_CREATE);
+    final Deque<MessageFrame> messageFrameStack = messageFrame.getMessageFrameStack();
+    while (messageFrameStack.size() < depth) {
+      messageFrameStack.push(messageFrame);
+    }
     return messageFrame;
   }
 }

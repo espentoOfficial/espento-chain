@@ -31,6 +31,7 @@ import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.TransactionValidationParams;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.vm.BlockHashLookup;
+import org.hyperledger.besu.ethereum.vm.CachingBlockHashLookup;
 import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
@@ -96,7 +97,7 @@ public class PrivateMigrationBlockProcessor {
       }
 
       final WorldUpdater worldStateUpdater = worldState.updater();
-      final BlockHashLookup blockHashLookup = new BlockHashLookup(blockHeader, blockchain);
+      final BlockHashLookup blockHashLookup = new CachingBlockHashLookup(blockHeader, blockchain);
       final Address miningBeneficiary =
           miningBeneficiaryCalculator.calculateBeneficiary(blockHeader);
 
@@ -109,7 +110,8 @@ public class PrivateMigrationBlockProcessor {
               miningBeneficiary,
               blockHashLookup,
               true,
-              TransactionValidationParams.processingBlock());
+              TransactionValidationParams.processingBlock(),
+              Wei.ZERO);
       if (result.isInvalid()) {
         return BlockProcessingResult.FAILED;
       }
@@ -124,8 +126,8 @@ public class PrivateMigrationBlockProcessor {
     if (!rewardCoinbase(worldState, blockHeader, ommers, skipZeroBlockRewards)) {
       return BlockProcessingResult.FAILED;
     }
-    BlockProcessingOutputs yield = new BlockProcessingOutputs(worldState, receipts);
-    return new BlockProcessingResult(Optional.of(yield));
+    BlockProcessingOutputs blockProcessingOutput = new BlockProcessingOutputs(worldState, receipts);
+    return new BlockProcessingResult(Optional.of(blockProcessingOutput));
   }
 
   private boolean rewardCoinbase(
@@ -139,7 +141,7 @@ public class PrivateMigrationBlockProcessor {
 
     final Wei coinbaseReward = blockReward.add(blockReward.multiply(ommers.size()).divide(32));
     final WorldUpdater updater = worldState.updater();
-    final MutableAccount coinbase = updater.getOrCreate(header.getCoinbase()).getMutable();
+    final MutableAccount coinbase = updater.getOrCreate(header.getCoinbase());
 
     coinbase.incrementBalance(coinbaseReward);
     for (final BlockHeader ommerHeader : ommers) {
@@ -153,8 +155,7 @@ public class PrivateMigrationBlockProcessor {
         return false;
       }
 
-      final MutableAccount ommerCoinbase =
-          updater.getOrCreate(ommerHeader.getCoinbase()).getMutable();
+      final MutableAccount ommerCoinbase = updater.getOrCreate(ommerHeader.getCoinbase());
       final long distance = header.getNumber() - ommerHeader.getNumber();
       final Wei ommerReward = blockReward.subtract(blockReward.multiply(distance).divide(8));
       ommerCoinbase.incrementBalance(ommerReward);

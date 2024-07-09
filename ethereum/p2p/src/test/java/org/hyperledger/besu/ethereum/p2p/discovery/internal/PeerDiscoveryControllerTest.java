@@ -32,9 +32,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.crypto.Hash;
-import org.hyperledger.besu.crypto.NodeKey;
 import org.hyperledger.besu.crypto.SignatureAlgorithm;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
+import org.hyperledger.besu.cryptoservices.NodeKey;
 import org.hyperledger.besu.ethereum.forkid.ForkId;
 import org.hyperledger.besu.ethereum.forkid.ForkIdManager;
 import org.hyperledger.besu.ethereum.p2p.discovery.DiscoveryPeer;
@@ -78,9 +78,9 @@ import org.ethereum.beacon.discovery.schema.IdentitySchemaInterpreter;
 import org.ethereum.beacon.discovery.schema.NodeRecord;
 import org.ethereum.beacon.discovery.schema.NodeRecordFactory;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 public class PeerDiscoveryControllerTest {
@@ -103,7 +103,7 @@ public class PeerDiscoveryControllerTest {
     return Math.max(100, prev * 2);
   }
 
-  @Before
+  @BeforeEach
   public void initializeMocks() {
     final List<NodeKey> nodeKeys = PeerDiscoveryTestHelper.generateNodeKeys(1);
     localNodeKey = nodeKeys.get(0);
@@ -111,7 +111,7 @@ public class PeerDiscoveryControllerTest {
     peerTable = new PeerTable(localPeer.getId());
   }
 
-  @After
+  @AfterEach
   public void stopTable() {
     if (controller != null) {
       controller.stop().join();

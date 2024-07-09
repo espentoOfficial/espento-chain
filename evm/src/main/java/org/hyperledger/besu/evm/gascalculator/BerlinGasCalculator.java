@@ -27,8 +27,8 @@ import org.hyperledger.besu.evm.internal.Words;
 import org.hyperledger.besu.evm.precompile.BigIntegerModularExponentiationPrecompiledContract;
 
 import java.math.BigInteger;
+import java.util.function.Supplier;
 
-import com.google.common.base.Supplier;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.units.bigints.UInt256;
 
@@ -247,15 +247,26 @@ public class BerlinGasCalculator extends IstanbulGasCalculator {
         BigIntegerModularExponentiationPrecompiledContract.modulusLength(input);
     final long exponentOffset =
         clampedAdd(BigIntegerModularExponentiationPrecompiledContract.BASE_OFFSET, baseLength);
+
+    long multiplicationComplexity = (Math.max(modulusLength, baseLength) + 7L) / 8L;
+    multiplicationComplexity =
+        Words.clampedMultiply(multiplicationComplexity, multiplicationComplexity);
+
+    if (multiplicationComplexity == 0) {
+      return 200;
+    } else if (multiplicationComplexity > 0) {
+      long maxExponentLength = Long.MAX_VALUE / multiplicationComplexity * 3 / 8;
+      if (exponentLength > maxExponentLength) {
+        return Long.MAX_VALUE;
+      }
+    }
+
     final long firstExponentBytesCap =
         Math.min(exponentLength, ByzantiumGasCalculator.MAX_FIRST_EXPONENT_BYTES);
     final BigInteger firstExpBytes =
         BigIntegerModularExponentiationPrecompiledContract.extractParameter(
             input, clampedToInt(exponentOffset), clampedToInt(firstExponentBytesCap));
     final long adjustedExponentLength = adjustedExponentLength(exponentLength, firstExpBytes);
-    long multiplicationComplexity = (Math.max(modulusLength, baseLength) + 7L) / 8L;
-    multiplicationComplexity =
-        Words.clampedMultiply(multiplicationComplexity, multiplicationComplexity);
 
     long gasRequirement =
         clampedMultiply(multiplicationComplexity, Math.max(adjustedExponentLength, 1L));

@@ -22,11 +22,15 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.AbstractBlockP
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonCallParameter;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.privacy.methods.PrivacyIdProvider;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.privacy.PrivacyController;
+import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
+import org.hyperledger.besu.ethereum.transaction.TransactionInvalidReason;
 
 public class PrivCall extends AbstractBlockParameterMethod {
 
@@ -72,8 +76,7 @@ public class PrivCall extends AbstractBlockParameterMethod {
                                 request.getRequest().getId(), result.getOutput().toString())),
                         reason ->
                             new JsonRpcErrorResponse(
-                                request.getRequest().getId(),
-                                JsonRpcErrorConverter.convertTransactionInvalidReason(reason))))
+                                request.getRequest().getId(), errorResponse(result, reason))))
         .orElse(validRequestBlockNotFound(request));
   }
 
@@ -84,6 +87,15 @@ public class PrivCall extends AbstractBlockParameterMethod {
   @Override
   public JsonRpcResponse response(final JsonRpcRequestContext requestContext) {
     return (JsonRpcResponse) findResultByParamType(requestContext);
+  }
+
+  private JsonRpcError errorResponse(
+      final TransactionProcessingResult result, final TransactionInvalidReason reason) {
+    if (result.getRevertReason().isPresent() && result.getRevertReason().get().size() >= 4) {
+      return new JsonRpcError(
+          RpcErrorType.REVERT_ERROR, result.getRevertReason().get().toHexString());
+    }
+    return new JsonRpcError(JsonRpcErrorConverter.convertTransactionInvalidReason(reason));
   }
 
   private JsonCallParameter validateAndGetCallParams(final JsonRpcRequestContext request) {

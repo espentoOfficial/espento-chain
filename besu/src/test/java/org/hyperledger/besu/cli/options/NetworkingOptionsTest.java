@@ -16,7 +16,6 @@ package org.hyperledger.besu.cli.options;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.hyperledger.besu.cli.DefaultCommandValues.DEFAULT_P2P_PEER_LOWER_BOUND;
 
 import org.hyperledger.besu.cli.options.unstable.NetworkingOptions;
 import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
@@ -24,11 +23,11 @@ import org.hyperledger.besu.ethereum.p2p.config.NetworkingConfiguration;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class NetworkingOptionsTest
     extends AbstractCLIOptionsTest<NetworkingConfiguration, NetworkingOptions> {
 
@@ -130,32 +129,6 @@ public class NetworkingOptionsTest
   }
 
   @Test
-  public void checkP2pPeerLowerBound_isSet() {
-    final int lowerBound = 13;
-    final TestBesuCommand cmd = parseCommand("--Xp2p-peer-lower-bound", String.valueOf(lowerBound));
-
-    final NetworkingOptions options = cmd.getNetworkingOptions();
-    final NetworkingConfiguration networkingConfig = options.toDomainObject();
-    assertThat(networkingConfig.getRlpx().getPeerLowerBound()).isEqualTo(lowerBound);
-
-    assertThat(commandErrorOutput.toString(UTF_8)).isEmpty();
-    assertThat(commandOutput.toString(UTF_8)).isEmpty();
-  }
-
-  @Test
-  public void checkP2pPeerLowerBound_isNotSet() {
-    final TestBesuCommand cmd = parseCommand();
-
-    final NetworkingOptions options = cmd.getNetworkingOptions();
-    final NetworkingConfiguration networkingConfig = options.toDomainObject();
-    assertThat(networkingConfig.getRlpx().getPeerLowerBound())
-        .isEqualTo(DEFAULT_P2P_PEER_LOWER_BOUND);
-
-    assertThat(commandErrorOutput.toString(UTF_8)).isEmpty();
-    assertThat(commandOutput.toString(UTF_8)).isEmpty();
-  }
-
-  @Test
   public void checkFilterByForkIdNotSet() {
     final TestBesuCommand cmd = parseCommand();
 
@@ -192,27 +165,28 @@ public class NetworkingOptionsTest
   }
 
   @Override
-  NetworkingConfiguration createDefaultDomainObject() {
+  protected NetworkingConfiguration createDefaultDomainObject() {
     return NetworkingConfiguration.create();
   }
 
   @Override
-  NetworkingConfiguration createCustomizedDomainObject() {
+  protected NetworkingConfiguration createCustomizedDomainObject() {
     final NetworkingConfiguration config = NetworkingConfiguration.create();
     config.setInitiateConnectionsFrequency(
         NetworkingConfiguration.DEFAULT_INITIATE_CONNECTIONS_FREQUENCY_SEC + 10);
     config.setCheckMaintainedConnectionsFrequency(
         NetworkingConfiguration.DEFAULT_CHECK_MAINTAINED_CONNECTIONS_FREQUENCY_SEC + 10);
+    config.setPeerLowerBound(NetworkingConfiguration.DEFAULT_PEER_LOWER_BOUND - 10);
     return config;
   }
 
   @Override
-  NetworkingOptions optionsFromDomainObject(final NetworkingConfiguration domainObject) {
+  protected NetworkingOptions optionsFromDomainObject(final NetworkingConfiguration domainObject) {
     return NetworkingOptions.fromConfig(domainObject);
   }
 
   @Override
-  NetworkingOptions getOptionsFromBesuCommand(final TestBesuCommand besuCommand) {
+  protected NetworkingOptions getOptionsFromBesuCommand(final TestBesuCommand besuCommand) {
     return besuCommand.getNetworkingOptions();
   }
 

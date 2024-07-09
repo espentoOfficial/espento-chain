@@ -140,9 +140,8 @@ public class TransitionContext implements MergeContext {
   }
 
   @Override
-  public void putPayloadById(
-      final PayloadIdentifier payloadId, final BlockWithReceipts blockWithReceipts) {
-    postMergeContext.putPayloadById(payloadId, blockWithReceipts);
+  public void putPayloadById(final PayloadWrapper payloadWrapper) {
+    postMergeContext.putPayloadById(payloadWrapper);
   }
 
   @Override
@@ -153,5 +152,10 @@ public class TransitionContext implements MergeContext {
   @Override
   public boolean isCheckpointPostMergeSync() {
     return false;
+  }
+
+  @Override
+  public boolean isPostMergeAtGenesis() {
+    return postMergeContext.isPostMergeAtGenesis();
   }
 }

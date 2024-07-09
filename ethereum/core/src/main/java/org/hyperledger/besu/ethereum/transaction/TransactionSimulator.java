@@ -14,28 +14,28 @@
  */
 package org.hyperledger.besu.ethereum.transaction;
 
-import static org.hyperledger.besu.ethereum.goquorum.GoQuorumPrivateStateUtil.getPrivateWorldStateAtBlock;
+import static org.hyperledger.besu.ethereum.mainnet.feemarket.ExcessBlobGasCalculator.calculateExcessBlobGasForParent;
 
 import org.hyperledger.besu.crypto.SECPSignature;
 import org.hyperledger.besu.crypto.SignatureAlgorithm;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
 import org.hyperledger.besu.datatypes.Address;
+import org.hyperledger.besu.datatypes.BlobGas;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
 import org.hyperledger.besu.ethereum.core.BlockHeaderBuilder;
 import org.hyperledger.besu.ethereum.core.MutableWorldState;
-import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.core.Transaction;
+import org.hyperledger.besu.ethereum.mainnet.ImmutableTransactionValidationParams;
 import org.hyperledger.besu.ethereum.mainnet.MainnetTransactionProcessor;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
 import org.hyperledger.besu.ethereum.mainnet.TransactionValidationParams;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
-import org.hyperledger.besu.ethereum.vm.BlockHashLookup;
+import org.hyperledger.besu.ethereum.vm.CachingBlockHashLookup;
 import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
-import org.hyperledger.besu.ethereum.worldstate.GoQuorumMutablePrivateAndPublicWorldStateUpdater;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
@@ -43,11 +43,13 @@ import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
 import java.math.BigInteger;
 import java.util.Optional;
+import java.util.function.Supplier;
 import javax.annotation.Nonnull;
 
-import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import org.apache.tuweni.bytes.Bytes;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /*
  * Used to process transactions for eth_call and eth_estimateGas.
@@ -56,6 +58,7 @@ import org.apache.tuweni.bytes.Bytes;
  * blockchain or to estimate the transaction gas cost.
  */
 public class TransactionSimulator {
+  private static final Logger LOG = LoggerFactory.getLogger(TransactionSimulator.class);
   private static final Supplier<SignatureAlgorithm> SIGNATURE_ALGORITHM =
       Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
 
@@ -76,27 +79,17 @@ public class TransactionSimulator {
   private final Blockchain blockchain;
   private final WorldStateArchive worldStateArchive;
   private final ProtocolSchedule protocolSchedule;
-  private final Optional<PrivacyParameters> maybePrivacyParameters;
-
-  public TransactionSimulator(
-      final Blockchain blockchain,
-      final WorldStateArchive worldStateArchive,
-      final ProtocolSchedule protocolSchedule) {
-    this.blockchain = blockchain;
-    this.worldStateArchive = worldStateArchive;
-    this.protocolSchedule = protocolSchedule;
-    this.maybePrivacyParameters = Optional.empty();
-  }
+  private final long rpcGasCap;
 
   public TransactionSimulator(
       final Blockchain blockchain,
       final WorldStateArchive worldStateArchive,
       final ProtocolSchedule protocolSchedule,
-      final PrivacyParameters privacyParameters) {
+      final long rpcGasCap) {
     this.blockchain = blockchain;
     this.worldStateArchive = worldStateArchive;
     this.protocolSchedule = protocolSchedule;
-    this.maybePrivacyParameters = Optional.of(privacyParameters);
+    this.rpcGasCap = rpcGasCap;
   }
 
   public Optional<TransactionSimulatorResult> process(
@@ -105,7 +98,65 @@ public class TransactionSimulator {
       final OperationTracer operationTracer,
       final long blockNumber) {
     final BlockHeader header = blockchain.getBlockHeader(blockNumber).orElse(null);
-    return process(callParams, transactionValidationParams, operationTracer, header);
+    return process(
+        callParams,
+        transactionValidationParams,
+        operationTracer,
+        (mutableWorldState, transactionSimulatorResult) -> transactionSimulatorResult,
+        header);
+  }
+
+  public Optional<TransactionSimulatorResult> processAtHead(final CallParameter callParams) {
+    return process(
+        callParams,
+        ImmutableTransactionValidationParams.builder()
+            .from(TransactionValidationParams.transactionSimulator())
+            .isAllowExceedingBalance(true)
+            .build(),
+        OperationTracer.NO_TRACING,
+        (mutableWorldState, transactionSimulatorResult) -> transactionSimulatorResult,
+        blockchain.getChainHeadHeader());
+  }
+
+  /**
+   * Processes a transaction simulation with the provided parameters and executes pre-worldstate
+   * close actions.
+   *
+   * @param callParams The call parameters for the transaction.
+   * @param transactionValidationParams The validation parameters for the transaction.
+   * @param operationTracer The tracer for capturing operations during processing.
+   * @param preWorldStateCloseGuard The pre-worldstate close guard for executing pre-close actions.
+   * @param header The block header.
+   * @return An Optional containing the result of the processing.
+   */
+  public <U> Optional<U> process(
+      final CallParameter callParams,
+      final TransactionValidationParams transactionValidationParams,
+      final OperationTracer operationTracer,
+      final PreCloseStateHandler<U> preWorldStateCloseGuard,
+      final BlockHeader header) {
+    if (header == null) {
+      return Optional.empty();
+    }
+
+    try (final MutableWorldState ws = getWorldState(header)) {
+
+      WorldUpdater updater = getEffectiveWorldStateUpdater(header, ws);
+
+      // in order to trace the state diff we need to make sure that
+      // the world updater always has a parent
+      if (operationTracer instanceof DebugOperationTracer) {
+        updater = updater.parentUpdater().isPresent() ? updater : updater.updater();
+      }
+
+      return preWorldStateCloseGuard.apply(
+          ws,
+          processWithWorldUpdater(
+              callParams, transactionValidationParams, operationTracer, header, updater));
+
+    } catch (final Exception e) {
+      return Optional.empty();
+    }
   }
 
   public Optional<TransactionSimulatorResult> process(
@@ -115,6 +166,7 @@ public class TransactionSimulator {
         callParams,
         TransactionValidationParams.transactionSimulator(),
         OperationTracer.NO_TRACING,
+        (mutableWorldState, transactionSimulatorResult) -> transactionSimulatorResult,
         header);
   }
 
@@ -127,44 +179,9 @@ public class TransactionSimulator {
         blockNumber);
   }
 
-  public Optional<TransactionSimulatorResult> processAtHead(final CallParameter callParams) {
-    return process(
-        callParams,
-        TransactionValidationParams.transactionSimulator(),
-        OperationTracer.NO_TRACING,
-        blockchain.getChainHeadHeader());
-  }
-
-  public Optional<TransactionSimulatorResult> process(
-      final CallParameter callParams,
-      final TransactionValidationParams transactionValidationParams,
-      final OperationTracer operationTracer,
-      final BlockHeader header) {
-    if (header == null) {
-      return Optional.empty();
-    }
-
-    try (final var ws = getWorldState(header)) {
-
-      WorldUpdater updater = getEffectiveWorldStateUpdater(header, ws);
-
-      // in order to trace the state diff we need to make sure that
-      // the world updater always has a parent
-      if (operationTracer instanceof DebugOperationTracer) {
-        updater = updater.parentUpdater().isPresent() ? updater : updater.updater();
-      }
-
-      return processWithWorldUpdater(
-          callParams, transactionValidationParams, operationTracer, header, updater);
-
-    } catch (final Exception e) {
-      return Optional.empty();
-    }
-  }
-
   private MutableWorldState getWorldState(final BlockHeader header) {
     return worldStateArchive
-        .getMutable(header.getStateRoot(), header.getHash(), false)
+        .getMutable(header, false)
         .orElseThrow(
             () ->
                 new IllegalArgumentException(
@@ -178,7 +195,7 @@ public class TransactionSimulator {
       final OperationTracer operationTracer,
       final BlockHeader header,
       final WorldUpdater updater) {
-    final ProtocolSpec protocolSpec = protocolSchedule.getByBlockNumber(header.getNumber());
+    final ProtocolSpec protocolSpec = protocolSchedule.getByBlockHeader(header);
 
     final Address senderAddress =
         callParams.getFrom() != null ? callParams.getFrom() : DEFAULT_FROM;
@@ -196,17 +213,22 @@ public class TransactionSimulator {
     final Account sender = updater.get(senderAddress);
     final long nonce = sender != null ? sender.getNonce() : 0L;
 
-    final long gasLimit =
+    long gasLimit =
         callParams.getGasLimit() >= 0
             ? callParams.getGasLimit()
             : blockHeaderToProcess.getGasLimit();
+    if (rpcGasCap > 0) {
+      final long gasCap = rpcGasCap;
+      if (gasCap < gasLimit) {
+        gasLimit = gasCap;
+        LOG.info("Capping gasLimit to " + gasCap);
+      }
+    }
     final Wei value = callParams.getValue() != null ? callParams.getValue() : Wei.ZERO;
     final Bytes payload = callParams.getPayload() != null ? callParams.getPayload() : Bytes.EMPTY;
 
     final MainnetTransactionProcessor transactionProcessor =
-        protocolSchedule
-            .getByBlockNumber(blockHeaderToProcess.getNumber())
-            .getTransactionProcessor();
+        protocolSchedule.getByBlockHeader(blockHeaderToProcess).getTransactionProcessor();
 
     final Optional<Transaction> maybeTransaction =
         buildTransaction(
@@ -222,6 +244,16 @@ public class TransactionSimulator {
       return Optional.empty();
     }
 
+    final Optional<BlockHeader> maybeParentHeader =
+        blockchain.getBlockHeader(blockHeaderToProcess.getParentHash());
+    final Wei blobGasPrice =
+        protocolSpec
+            .getFeeMarket()
+            .blobGasPricePerGas(
+                maybeParentHeader
+                    .map(parent -> calculateExcessBlobGasForParent(protocolSpec, parent))
+                    .orElse(BlobGas.ZERO));
+
     final Transaction transaction = maybeTransaction.get();
     final TransactionProcessingResult result =
         transactionProcessor.processTransaction(
@@ -232,33 +264,11 @@ public class TransactionSimulator {
             protocolSpec
                 .getMiningBeneficiaryCalculator()
                 .calculateBeneficiary(blockHeaderToProcess),
-            new BlockHashLookup(blockHeaderToProcess, blockchain),
+            new CachingBlockHashLookup(blockHeaderToProcess, blockchain),
             false,
             transactionValidationParams,
-            operationTracer);
-
-    // If GoQuorum privacy enabled, and value = zero, get max gas possible for a PMT hash.
-    // It is possible to have a data field that has a lower intrinsic value than the PMT hash.
-    // This means a potential over-estimate of gas, but the tx, if sent with this gas, will not
-    // fail.
-    final boolean goQuorumCompatibilityMode =
-        transactionProcessor.getTransactionValidator().getGoQuorumCompatibilityMode();
-
-    if (goQuorumCompatibilityMode && value.isZero()) {
-      final long privateGasEstimateAndState =
-          protocolSpec.getGasCalculator().getMaximumTransactionCost(64);
-      if (privateGasEstimateAndState > result.getEstimateGasUsedByTransaction()) {
-        // modify the result to have the larger estimate
-        final TransactionProcessingResult resultPmt =
-            TransactionProcessingResult.successful(
-                result.getLogs(),
-                privateGasEstimateAndState,
-                result.getGasRemaining(),
-                result.getOutput(),
-                result.getValidationResult());
-        return Optional.of(new TransactionSimulatorResult(transaction, resultPmt));
-      }
-    }
+            operationTracer,
+            blobGasPrice);
 
     return Optional.of(new TransactionSimulatorResult(transaction, result));
   }
@@ -317,29 +327,15 @@ public class TransactionSimulator {
     return Optional.ofNullable(transaction);
   }
 
-  // return combined private/public world state updater if GoQuorum mode, otherwise the public state
   public WorldUpdater getEffectiveWorldStateUpdater(
       final BlockHeader header, final MutableWorldState publicWorldState) {
-
-    if (maybePrivacyParameters.isPresent()
-        && maybePrivacyParameters.get().getGoQuorumPrivacyParameters().isPresent()) {
-
-      final MutableWorldState privateWorldState =
-          getPrivateWorldStateAtBlock(
-              maybePrivacyParameters.get().getGoQuorumPrivacyParameters(), header);
-      return new GoQuorumMutablePrivateAndPublicWorldStateUpdater(
-          publicWorldState.updater(), privateWorldState.updater());
-    }
-
     return publicWorldState.updater();
   }
 
   public Optional<Boolean> doesAddressExistAtHead(final Address address) {
     final BlockHeader header = blockchain.getChainHeadHeader();
     try (final MutableWorldState worldState =
-        worldStateArchive
-            .getMutable(header.getStateRoot(), header.getHash(), false)
-            .orElseThrow()) {
+        worldStateArchive.getMutable(header, false).orElseThrow()) {
       return doesAddressExist(worldState, address, header);
     } catch (final Exception ex) {
       return Optional.empty();

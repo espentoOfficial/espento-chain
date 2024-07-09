@@ -15,12 +15,11 @@
 package org.hyperledger.besu.ethereum.eth.sync;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.hyperledger.besu.util.Slf4jLambdaHelper.infoLambda;
 
 import org.hyperledger.besu.consensus.merge.ForkchoiceEvent;
 import org.hyperledger.besu.consensus.merge.UnverifiedForkchoiceListener;
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.ethereum.ProtocolContext;
-import org.hyperledger.besu.ethereum.bonsai.BonsaiWorldStateArchive;
 import org.hyperledger.besu.ethereum.core.Synchronizer;
 import org.hyperledger.besu.ethereum.eth.manager.EthContext;
 import org.hyperledger.besu.ethereum.eth.sync.checkpointsync.CheckpointDownloaderFactory;
@@ -30,20 +29,22 @@ import org.hyperledger.besu.ethereum.eth.sync.fastsync.worldstate.FastDownloader
 import org.hyperledger.besu.ethereum.eth.sync.fullsync.FullSyncDownloader;
 import org.hyperledger.besu.ethereum.eth.sync.fullsync.SyncTerminationCondition;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.SnapDownloaderFactory;
-import org.hyperledger.besu.ethereum.eth.sync.snapsync.SnapPersistedContext;
+import org.hyperledger.besu.ethereum.eth.sync.snapsync.context.SnapSyncStatePersistenceManager;
 import org.hyperledger.besu.ethereum.eth.sync.state.PendingBlocksManager;
 import org.hyperledger.besu.ethereum.eth.sync.state.SyncState;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.storage.StorageProvider;
-import org.hyperledger.besu.ethereum.worldstate.Pruner;
+import org.hyperledger.besu.ethereum.trie.bonsai.BonsaiWorldStateProvider;
+import org.hyperledger.besu.ethereum.trie.forest.pruner.Pruner;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage;
 import org.hyperledger.besu.metrics.BesuMetricCategory;
-import org.hyperledger.besu.plugin.data.Address;
 import org.hyperledger.besu.plugin.data.SyncStatus;
 import org.hyperledger.besu.plugin.services.BesuEvents.SyncStatusListener;
 import org.hyperledger.besu.plugin.services.MetricsSystem;
 import org.hyperledger.besu.util.log.FramedLogMessage;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -145,7 +146,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
       this.fastSyncFactory =
           () ->
               CheckpointDownloaderFactory.createCheckpointDownloader(
-                  new SnapPersistedContext(storageProvider),
+                  new SnapSyncStatePersistenceManager(storageProvider),
                   pivotBlockSelector,
                   syncConfig,
                   dataDirectory,
@@ -160,7 +161,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
       this.fastSyncFactory =
           () ->
               SnapDownloaderFactory.createSnapDownloader(
-                  new SnapPersistedContext(storageProvider),
+                  new SnapSyncStatePersistenceManager(storageProvider),
                   pivotBlockSelector,
                   syncConfig,
                   dataDirectory,
@@ -207,6 +208,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
               manager.start();
             }
           });
+
       CompletableFuture<Void> future;
       if (fastSyncDownloader.isPresent()) {
         future = fastSyncDownloader.get().start().thenCompose(this::handleSyncResult);
@@ -252,8 +254,7 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
     result
         .getPivotBlockHeader()
         .ifPresent(
-            blockHeader ->
-                protocolContext.getWorldStateArchive().setArchiveStateUnSafe(blockHeader));
+            blockHeader -> protocolContext.getWorldStateArchive().resetArchiveStateTo(blockHeader));
     LOG.info(
         "Sync completed successfully with pivot block {}",
         result.getPivotBlockNumber().getAsLong());
@@ -313,18 +314,28 @@ public class DefaultSynchronizer implements Synchronizer, UnverifiedForkchoiceLi
       fastSyncDownloader.get().deleteFastSyncState();
     }
 
+    LOG.atDebug()
+        .setMessage("heal stacktrace: \n{}")
+        .addArgument(
+            () -> {
+              var sw = new StringWriter();
+              new Exception().printStackTrace(new PrintWriter(sw, true));
+              return sw.toString();
+            })
+        .log();
+
     final List<String> lines = new ArrayList<>();
     lines.add("Besu has identified a problem with its worldstate database.");
     lines.add("Your node will fetch the correct data from peers to repair the problem.");
     lines.add("Starting the sync pipeline...");
-    infoLambda(LOG, FramedLogMessage.generate(lines));
+    LOG.atInfo().setMessage(FramedLogMessage.generate(lines)).log();
 
     this.syncState.markInitialSyncRestart();
     this.syncState.markResyncNeeded();
     maybeAccountToRepair.ifPresent(
         address -> {
-          if (this.protocolContext.getWorldStateArchive() instanceof BonsaiWorldStateArchive) {
-            ((BonsaiWorldStateArchive) this.protocolContext.getWorldStateArchive())
+          if (this.protocolContext.getWorldStateArchive() instanceof BonsaiWorldStateProvider) {
+            ((BonsaiWorldStateProvider) this.protocolContext.getWorldStateArchive())
                 .prepareStateHealing(
                     org.hyperledger.besu.datatypes.Address.wrap(address), location);
           }

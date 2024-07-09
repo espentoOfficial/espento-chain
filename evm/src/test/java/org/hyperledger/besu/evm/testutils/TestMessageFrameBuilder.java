@@ -23,12 +23,11 @@ import org.hyperledger.besu.evm.Code;
 import org.hyperledger.besu.evm.code.CodeV0;
 import org.hyperledger.besu.evm.frame.BlockValues;
 import org.hyperledger.besu.evm.frame.MessageFrame;
+import org.hyperledger.besu.evm.internal.Words;
 import org.hyperledger.besu.evm.toy.ToyWorld;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -40,7 +39,6 @@ public class TestMessageFrameBuilder {
   public static final Address DEFAUT_ADDRESS = Address.fromHexString("0xe8f1b89");
   private static final int maxStackSize = DEFAULT_MAX_STACK_SIZE;
 
-  private Deque<MessageFrame> messageFrameStack = new ArrayDeque<>();
   private Optional<BlockValues> blockValues = Optional.empty();
   private Optional<WorldUpdater> worldUpdater = Optional.empty();
   private long initialGas = Long.MAX_VALUE;
@@ -49,19 +47,15 @@ public class TestMessageFrameBuilder {
   private Address originator = DEFAUT_ADDRESS;
   private Address contract = DEFAUT_ADDRESS;
   private Wei gasPrice = Wei.ZERO;
+  private Wei blobGasPrice = Wei.ZERO;
   private Wei value = Wei.ZERO;
   private Bytes inputData = Bytes.EMPTY;
   private Code code = CodeV0.EMPTY_CODE;
   private int pc = 0;
   private int section = 0;
   private final List<Bytes> stackItems = new ArrayList<>();
-  private int depth = 0;
   private Optional<Function<Long, Hash>> blockHashLookup = Optional.empty();
-
-  TestMessageFrameBuilder messageFrameStack(final Deque<MessageFrame> messageFrameStack) {
-    this.messageFrameStack = messageFrameStack;
-    return this;
-  }
+  private Bytes memory = Bytes.EMPTY;
 
   public TestMessageFrameBuilder worldUpdater(final WorldUpdater worldUpdater) {
     this.worldUpdater = Optional.of(worldUpdater);
@@ -98,6 +92,11 @@ public class TestMessageFrameBuilder {
     return this;
   }
 
+  public TestMessageFrameBuilder blobGasPrice(final Wei blobGasPrice) {
+    this.blobGasPrice = blobGasPrice;
+    return this;
+  }
+
   public TestMessageFrameBuilder value(final Wei value) {
     this.value = value;
     return this;
@@ -128,11 +127,6 @@ public class TestMessageFrameBuilder {
     return this;
   }
 
-  public TestMessageFrameBuilder depth(final int depth) {
-    this.depth = depth;
-    return this;
-  }
-
   public TestMessageFrameBuilder pushStackItem(final Bytes item) {
     stackItems.add(item);
     return this;
@@ -143,16 +137,21 @@ public class TestMessageFrameBuilder {
     return this;
   }
 
+  public TestMessageFrameBuilder memory(final Bytes memory) {
+    this.memory = memory;
+    return this;
+  }
+
   public MessageFrame build() {
     final MessageFrame frame =
         MessageFrame.builder()
             .type(MessageFrame.Type.MESSAGE_CALL)
-            .messageFrameStack(messageFrameStack)
             .worldUpdater(worldUpdater.orElseGet(this::createDefaultWorldUpdater))
             .initialGas(initialGas)
             .address(address)
             .originator(originator)
             .gasPrice(gasPrice)
+            .blobGasPrice(blobGasPrice)
             .inputData(inputData)
             .sender(sender)
             .value(value)
@@ -160,16 +159,15 @@ public class TestMessageFrameBuilder {
             .contract(contract)
             .code(code)
             .blockValues(blockValues.orElseGet(() -> new FakeBlockValues(1337)))
-            .depth(depth)
             .completer(c -> {})
             .miningBeneficiary(Address.ZERO)
-            .blockHashLookup(
-                blockHashLookup.orElse(number -> Hash.hash(Bytes.ofUnsignedLong(number))))
+            .blockHashLookup(blockHashLookup.orElse(number -> Hash.hash(Words.longBytes(number))))
             .maxStackSize(maxStackSize)
             .build();
     frame.setPC(pc);
     frame.setSection(section);
     stackItems.forEach(frame::pushStackItem);
+    frame.writeMemory(0, memory.size(), memory);
     return frame;
   }
 

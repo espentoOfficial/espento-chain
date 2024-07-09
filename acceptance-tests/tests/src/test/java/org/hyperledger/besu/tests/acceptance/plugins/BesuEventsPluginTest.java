@@ -14,7 +14,7 @@
  */
 package org.hyperledger.besu.tests.acceptance.plugins;
 
-import org.hyperledger.besu.tests.acceptance.dsl.AcceptanceTestBase;
+import org.hyperledger.besu.tests.acceptance.dsl.AcceptanceTestBaseJunit5;
 import org.hyperledger.besu.tests.acceptance.dsl.node.BesuNode;
 
 import java.io.File;
@@ -25,14 +25,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import org.awaitility.Awaitility;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-public class BesuEventsPluginTest extends AcceptanceTestBase {
+public class BesuEventsPluginTest extends AcceptanceTestBaseJunit5 {
   private BesuNode pluginNode;
   private BesuNode minerNode;
 
-  @Before
+  @BeforeEach
   public void setUp() throws Exception {
     minerNode = besu.createMinerNode("minerNode");
     pluginNode =
@@ -42,7 +42,7 @@ public class BesuEventsPluginTest extends AcceptanceTestBase {
   }
 
   @Test
-  public void blockIsAnnounded() {
+  public void blockIsAnnounced() {
     waitForFile(pluginNode.homeDirectory().resolve("plugins/newBlock.2"));
   }
 

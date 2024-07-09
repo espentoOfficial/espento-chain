@@ -16,6 +16,7 @@ package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
 import static org.hyperledger.besu.evm.account.Account.MAX_NONCE;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
@@ -24,16 +25,18 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequest;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.BlockTrace;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.BlockTracer;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.Tracer;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTrace;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.DebugAccountAtResult;
 import org.hyperledger.besu.ethereum.api.query.BlockWithMetadata;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.api.query.TransactionWithMetadata;
 import org.hyperledger.besu.ethereum.core.BlockHeader;
+import org.hyperledger.besu.ethereum.core.MutableWorldState;
 import org.hyperledger.besu.ethereum.core.Transaction;
 import org.hyperledger.besu.ethereum.debug.TraceFrame;
 import org.hyperledger.besu.evm.account.Account;
@@ -41,12 +44,14 @@ import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
 import java.util.Collections;
 import java.util.Optional;
+import java.util.function.Function;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Answers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -55,7 +60,10 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class DebugAccountAtTest {
   @Mock private BlockTracer blockTracer;
   @Mock private BlockchainQueries blockchainQueries;
-  @Mock private BlockWithMetadata<TransactionWithMetadata, Hash> blockWithMetadata;
+
+  @Mock(answer = Answers.RETURNS_DEEP_STUBS)
+  private BlockWithMetadata<TransactionWithMetadata, Hash> blockWithMetadata;
+
   @Mock private BlockHeader blockHeader;
   @Mock private TransactionWithMetadata transactionWithMetadata;
   @Mock private BlockTrace blockTrace;
@@ -63,6 +71,8 @@ class DebugAccountAtTest {
   @Mock private TraceFrame traceFrame;
   @Mock private Transaction transaction;
   @Mock private WorldUpdater worldUpdater;
+  @Mock private MutableWorldState worldState;
+
   @Mock private Account account;
 
   private static DebugAccountAt debugAccountAt;
@@ -87,8 +97,8 @@ class DebugAccountAtTest {
     final JsonRpcResponse response = debugAccountAt.response(request);
 
     Assertions.assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
-    Assertions.assertThat(((JsonRpcErrorResponse) response).getError())
-        .isEqualByComparingTo(JsonRpcError.BLOCK_NOT_FOUND);
+    Assertions.assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualByComparingTo(RpcErrorType.BLOCK_NOT_FOUND);
   }
 
   @Test
@@ -102,8 +112,8 @@ class DebugAccountAtTest {
     final JsonRpcResponse response = debugAccountAt.response(request);
 
     Assertions.assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
-    Assertions.assertThat(((JsonRpcErrorResponse) response).getError())
-        .isEqualByComparingTo(JsonRpcError.INVALID_PARAMS);
+    Assertions.assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualByComparingTo(RpcErrorType.INVALID_PARAMS);
   }
 
   @Test
@@ -118,8 +128,8 @@ class DebugAccountAtTest {
     final JsonRpcResponse response = debugAccountAt.response(request);
 
     Assertions.assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
-    Assertions.assertThat(((JsonRpcErrorResponse) response).getError())
-        .isEqualByComparingTo(JsonRpcError.INVALID_PARAMS);
+    Assertions.assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualByComparingTo(RpcErrorType.INVALID_PARAMS);
   }
 
   @Test
@@ -134,12 +144,21 @@ class DebugAccountAtTest {
     final JsonRpcResponse response = debugAccountAt.response(request);
 
     Assertions.assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
-    Assertions.assertThat(((JsonRpcErrorResponse) response).getError())
-        .isEqualByComparingTo(JsonRpcError.INVALID_PARAMS);
+    Assertions.assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualByComparingTo(RpcErrorType.INVALID_PARAMS);
   }
 
   @Test
   void testTransactionNotFoundResponse() {
+    doAnswer(
+            invocation ->
+                invocation
+                    .<Function<MutableWorldState, Optional<? extends JsonRpcResponse>>>getArgument(
+                        1)
+                    .apply(worldState))
+        .when(blockchainQueries)
+        .getAndMapWorldState(any(), any());
+
     setupMockBlock();
     Mockito.when(blockWithMetadata.getTransactions())
         .thenReturn(Collections.singletonList(transactionWithMetadata));
@@ -150,12 +169,21 @@ class DebugAccountAtTest {
     final JsonRpcResponse response = debugAccountAt.response(request);
 
     Assertions.assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
-    Assertions.assertThat(((JsonRpcErrorResponse) response).getError())
-        .isEqualByComparingTo(JsonRpcError.TRANSACTION_NOT_FOUND);
+    Assertions.assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualByComparingTo(RpcErrorType.TRANSACTION_NOT_FOUND);
   }
 
   @Test
   void testNoAccountFoundResponse() {
+    doAnswer(
+            invocation ->
+                invocation
+                    .<Function<MutableWorldState, Optional<? extends JsonRpcResponse>>>getArgument(
+                        1)
+                    .apply(worldState))
+        .when(blockchainQueries)
+        .getAndMapWorldState(any(), any());
+
     setupMockTransaction();
     setupMockBlock();
 
@@ -166,12 +194,21 @@ class DebugAccountAtTest {
     final JsonRpcResponse response = debugAccountAt.response(request);
 
     Assertions.assertThat(response).isInstanceOf(JsonRpcErrorResponse.class);
-    Assertions.assertThat(((JsonRpcErrorResponse) response).getError())
-        .isEqualByComparingTo(JsonRpcError.NO_ACCOUNT_FOUND);
+    Assertions.assertThat(((JsonRpcErrorResponse) response).getErrorType())
+        .isEqualByComparingTo(RpcErrorType.NO_ACCOUNT_FOUND);
   }
 
   @Test
   void shouldBeSuccessfulWhenTransactionsAndAccountArePresent() {
+    doAnswer(
+            invocation ->
+                invocation
+                    .<Function<MutableWorldState, Optional<? extends JsonRpcResponse>>>getArgument(
+                        1)
+                    .apply(worldState))
+        .when(blockchainQueries)
+        .getAndMapWorldState(any(), any());
+
     final String codeString =
         "0x608060405234801561001057600080fd5b506004361061002b5760003560e01c8063b27b880414610030575b";
     final Bytes code = Bytes.fromHexString(codeString);
@@ -214,7 +251,8 @@ class DebugAccountAtTest {
     Mockito.when(blockchainQueries.blockByHash(any())).thenReturn(Optional.of(blockWithMetadata));
     Mockito.when(blockWithMetadata.getTransactions())
         .thenReturn(Collections.singletonList(transactionWithMetadata));
-    Mockito.when(blockTracer.trace(any(Hash.class), any())).thenReturn(Optional.of(blockTrace));
+    Mockito.when(blockTracer.trace(any(Tracer.TraceableState.class), any(Hash.class), any()))
+        .thenReturn(Optional.of(blockTrace));
     Mockito.when(blockTrace.getTransactionTraces())
         .thenReturn(Collections.singletonList(transactionTrace));
     Mockito.when(transactionTrace.getTransaction()).thenReturn(transaction);

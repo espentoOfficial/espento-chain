@@ -16,6 +16,7 @@ package org.hyperledger.besu.ethereum.forkid;
 
 import static java.util.Collections.emptyList;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.datatypes.Hash;
@@ -44,7 +45,7 @@ public class ForkIdTestUtil {
       final String genesisHash, final LongSupplier chainHeightSupplier, final long timestamp) {
     final Blockchain mockchain = mock(Blockchain.class);
     final BlockHeader mockHeader = mock(BlockHeader.class);
-    final Block block = new Block(mockHeader, null);
+    final Block block = spy(new Block(mockHeader, null));
     final BlockHeader mockChainHeadHeader = mock(BlockHeader.class);
     when(mockchain.getGenesisBlock()).thenReturn(block);
     when(mockchain.getChainHeadBlockNumber()).thenReturn(chainHeightSupplier.getAsLong());
@@ -52,6 +53,9 @@ public class ForkIdTestUtil {
     when(mockchain.getChainHeadHeader()).thenReturn(mockChainHeadHeader);
     when(mockChainHeadHeader.getNumber()).thenReturn(chainHeightSupplier.getAsLong());
     when(mockChainHeadHeader.getTimestamp()).thenReturn(timestamp);
+    final BlockHeader mockGenesisBlockHeader = mock(BlockHeader.class);
+    when(block.getHeader()).thenReturn(mockGenesisBlockHeader);
+    when(mockGenesisBlockHeader.getTimestamp()).thenReturn(1L);
     return mockchain;
   }
 
@@ -60,8 +64,6 @@ public class ForkIdTestUtil {
         "0xd4e56740f876aef8c010b86a40d5f56745a118d0906a34e69aec8c0db1cb8fa3";
     public static final String SEPOLIA =
         "0x25a5cc106eea7138acab33231d7160d69cb777ee0c2c553fcddf5138993e6dd9";
-    public static final String RINKEBY =
-        "0x6341fd3daf94b748c72ced5a5b26028f2474f5f00d824504e4fa37a75767e177";
     public static final String GOERLI =
         "0xbf7e331f7f7c1dd2e05159666b3bf8bc7a8a3a9eb1d518969eab529dd9b88c1a";
     public static final String PRIVATE =
@@ -73,10 +75,11 @@ public class ForkIdTestUtil {
         Arrays.asList(
             1920000L, 1150000L, 2463000L, 2675000L, 2675000L, 4370000L, 7280000L, 7280000L,
             9069000L, 9200000L, 12244000L, 12965000L, 13773000L, 15050000L);
-    public static final List<Long> SEPOLIA =
+    public static final List<Long> SEPOLIA_BLOCKNUMBERS =
         Arrays.asList(0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L, 1735371L);
-    public static final List<Long> RINKEBY =
-        Arrays.asList(1L, 2L, 3L, 3L, 1035301L, 3660663L, 4321234L, 5435345L);
+
+    public static final List<Long> SEPOLIA_TIMESTAMPS = Arrays.asList(1677557088L);
+
     public static final List<Long> GOERLI = Arrays.asList(0L, 0L, 0L, 0L, 0L, 0L, 0L, 1561651L);
     public static final List<Long> PRIVATE = Arrays.asList(0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
 
@@ -106,17 +109,8 @@ public class ForkIdTestUtil {
     public static final List<ForkId> SEPOLIA =
         Arrays.asList(
             new ForkId(Bytes.fromHexString("0xfe3366e7"), 1735371L),
-            new ForkId(Bytes.fromHexString("0xb96cbd13"), 0L));
-    public static final List<ForkId> RINKEBY =
-        Arrays.asList(
-            new ForkId(Bytes.fromHexString("0x3b8e0691"), 1L),
-            new ForkId(Bytes.fromHexString("0x60949295"), 2L),
-            new ForkId(Bytes.fromHexString("0x8bde40dd"), 3L),
-            new ForkId(Bytes.fromHexString("0xcb3a64bb"), 1035301L),
-            new ForkId(Bytes.fromHexString("0x8d748b57"), 3660663L),
-            new ForkId(Bytes.fromHexString("0xe49cab14"), 4321234L),
-            new ForkId(Bytes.fromHexString("0xafec6b27"), 5435345L),
-            new ForkId(Bytes.fromHexString("0xcbdb8838"), 0L));
+            new ForkId(Bytes.fromHexString("0xb96cbd13"), 1677557088L),
+            new ForkId(Bytes.fromHexString("0xf7f9bc08"), 0L)); // First Shanghai block (timestamp)
     public static final List<ForkId> GOERLI =
         Arrays.asList(
             new ForkId(Bytes.fromHexString("0xa3f5ab08"), 1561651L),
@@ -145,8 +139,8 @@ public class ForkIdTestUtil {
 
   public static class Network {
     public static final Network MAINNET = network(GenesisHash.MAINNET, Forks.MAINNET, emptyList());
-    public static final Network SEPOLIA = network(GenesisHash.SEPOLIA, Forks.SEPOLIA, emptyList());
-    public static final Network RINKEBY = network(GenesisHash.RINKEBY, Forks.RINKEBY, emptyList());
+    public static final Network SEPOLIA =
+        network(GenesisHash.SEPOLIA, Forks.SEPOLIA_BLOCKNUMBERS, Forks.SEPOLIA_TIMESTAMPS);
     public static final Network GOERLI = network(GenesisHash.GOERLI, Forks.GOERLI, emptyList());
     public static final Network PRIVATE = network(GenesisHash.PRIVATE, Forks.PRIVATE, emptyList());
 

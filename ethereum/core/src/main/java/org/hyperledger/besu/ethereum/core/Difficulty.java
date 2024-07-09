@@ -14,7 +14,7 @@
  */
 package org.hyperledger.besu.ethereum.core;
 
-import org.hyperledger.besu.plugin.data.Quantity;
+import org.hyperledger.besu.datatypes.Quantity;
 
 import java.math.BigInteger;
 
@@ -65,6 +65,10 @@ public final class Difficulty extends BaseUInt256Value<Difficulty> implements Qu
 
   public static Difficulty fromHexString(final String str) {
     return new Difficulty(str);
+  }
+
+  public static Difficulty fromHexOrDecimalString(final String str) {
+    return str.startsWith("0x") ? new Difficulty(str) : new Difficulty(new BigInteger(str));
   }
 
   @Override

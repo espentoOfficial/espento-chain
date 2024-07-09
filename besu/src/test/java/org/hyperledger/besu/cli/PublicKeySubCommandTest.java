@@ -20,10 +20,10 @@ import static org.assertj.core.api.Assertions.contentOf;
 
 import org.hyperledger.besu.BesuInfo;
 import org.hyperledger.besu.crypto.KeyPair;
-import org.hyperledger.besu.crypto.NodeKey;
 import org.hyperledger.besu.crypto.SECPPrivateKey;
 import org.hyperledger.besu.crypto.SignatureAlgorithm;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
+import org.hyperledger.besu.cryptoservices.NodeKey;
 import org.hyperledger.besu.ethereum.core.Util;
 
 import java.io.File;
@@ -35,14 +35,14 @@ import org.apache.tuweni.bytes.Bytes32;
 import org.bouncycastle.asn1.sec.SECNamedCurves;
 import org.bouncycastle.asn1.x9.X9ECParameters;
 import org.bouncycastle.crypto.params.ECDomainParameters;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.junit.jupiter.MockitoExtension;
 import picocli.CommandLine.Model.CommandSpec;
 
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class PublicKeySubCommandTest extends CommandTestAbstract {
 
   private static final String EXPECTED_PUBLIC_KEY_USAGE =
@@ -126,13 +126,13 @@ public class PublicKeySubCommandTest extends CommandTestAbstract {
   private static final String ALGORITHM = SignatureAlgorithm.ALGORITHM;
   private static ECDomainParameters curve;
 
-  @BeforeClass
+  @BeforeAll
   public static void setUp() {
     final X9ECParameters params = SECNamedCurves.getByName(CURVE_NAME);
     curve = new ECDomainParameters(params.getCurve(), params.getG(), params.getN(), params.getH());
   }
 
-  @Before
+  @BeforeEach
   public void before() {
     SignatureAlgorithmFactory.resetInstance();
   }

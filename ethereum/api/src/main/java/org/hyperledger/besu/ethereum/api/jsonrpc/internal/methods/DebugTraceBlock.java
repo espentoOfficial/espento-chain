@@ -19,10 +19,11 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.TransactionTraceParams;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.BlockTrace;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.BlockTracer;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.Tracer;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.results.DebugTraceTransactionResult;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Block;
@@ -33,6 +34,7 @@ import org.hyperledger.besu.ethereum.rlp.RLPException;
 import org.hyperledger.besu.ethereum.vm.DebugOperationTracer;
 
 import java.util.Collection;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -44,15 +46,15 @@ public class DebugTraceBlock implements JsonRpcMethod {
   private static final Logger LOG = LoggerFactory.getLogger(DebugTraceBlock.class);
   private final Supplier<BlockTracer> blockTracerSupplier;
   private final BlockHeaderFunctions blockHeaderFunctions;
-  private final BlockchainQueries blockchain;
+  private final BlockchainQueries blockchainQueries;
 
   public DebugTraceBlock(
       final Supplier<BlockTracer> blockTracerSupplier,
       final BlockHeaderFunctions blockHeaderFunctions,
-      final BlockchainQueries blockchain) {
+      final BlockchainQueries blockchainQueries) {
     this.blockTracerSupplier = blockTracerSupplier;
     this.blockHeaderFunctions = blockHeaderFunctions;
-    this.blockchain = blockchain;
+    this.blockchainQueries = blockchainQueries;
   }
 
   @Override
@@ -69,7 +71,7 @@ public class DebugTraceBlock implements JsonRpcMethod {
     } catch (final RLPException e) {
       LOG.debug("Failed to parse block RLP", e);
       return new JsonRpcErrorResponse(
-          requestContext.getRequest().getId(), JsonRpcError.INVALID_PARAMS);
+          requestContext.getRequest().getId(), RpcErrorType.INVALID_PARAMS);
     }
     final TraceOptions traceOptions =
         requestContext
@@ -77,18 +79,22 @@ public class DebugTraceBlock implements JsonRpcMethod {
             .map(TransactionTraceParams::traceOptions)
             .orElse(TraceOptions.DEFAULT);
 
-    if (this.blockchain.blockByHash(block.getHeader().getParentHash()).isPresent()) {
+    if (this.blockchainQueries.blockByHash(block.getHeader().getParentHash()).isPresent()) {
       final Collection<DebugTraceTransactionResult> results =
-          blockTracerSupplier
-              .get()
-              .trace(block, new DebugOperationTracer(traceOptions))
-              .map(BlockTrace::getTransactionTraces)
-              .map(DebugTraceTransactionResult::of)
+          Tracer.processTracing(
+                  blockchainQueries,
+                  Optional.of(block.getHeader()),
+                  mutableWorldState ->
+                      blockTracerSupplier
+                          .get()
+                          .trace(mutableWorldState, block, new DebugOperationTracer(traceOptions))
+                          .map(BlockTrace::getTransactionTraces)
+                          .map(DebugTraceTransactionResult::of))
               .orElse(null);
       return new JsonRpcSuccessResponse(requestContext.getRequest().getId(), results);
     } else {
       return new JsonRpcErrorResponse(
-          requestContext.getRequest().getId(), JsonRpcError.PARENT_BLOCK_NOT_FOUND);
+          requestContext.getRequest().getId(), RpcErrorType.PARENT_BLOCK_NOT_FOUND);
     }
   }
 }

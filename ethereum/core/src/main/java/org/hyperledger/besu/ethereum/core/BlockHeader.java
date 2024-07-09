@@ -15,7 +15,7 @@
 package org.hyperledger.besu.ethereum.core;
 
 import org.hyperledger.besu.datatypes.Address;
-import org.hyperledger.besu.datatypes.DataGas;
+import org.hyperledger.besu.datatypes.BlobGas;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.rlp.RLPInput;
@@ -23,7 +23,6 @@ import org.hyperledger.besu.ethereum.rlp.RLPOutput;
 import org.hyperledger.besu.evm.log.LogsBloomFilter;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.function.Supplier;
 
 import com.google.common.base.Suppliers;
@@ -41,8 +40,6 @@ public class BlockHeader extends SealableBlockHeader
   private final long nonce;
 
   private final Supplier<Hash> hash;
-
-  private Optional<LogsBloomFilter> privateLogsBloom;
 
   private final Supplier<ParsedExtraData> parsedExtraData;
 
@@ -64,52 +61,10 @@ public class BlockHeader extends SealableBlockHeader
       final Bytes32 mixHashOrPrevRandao,
       final long nonce,
       final Hash withdrawalsRoot,
-      final DataGas excessDataGas,
-      final BlockHeaderFunctions blockHeaderFunctions,
-      final Optional<LogsBloomFilter> privateLogsBloom) {
-    super(
-        parentHash,
-        ommersHash,
-        coinbase,
-        stateRoot,
-        transactionsRoot,
-        receiptsRoot,
-        logsBloom,
-        difficulty,
-        number,
-        gasLimit,
-        gasUsed,
-        timestamp,
-        extraData,
-        baseFee,
-        mixHashOrPrevRandao,
-        withdrawalsRoot,
-        excessDataGas);
-    this.nonce = nonce;
-    this.hash = Suppliers.memoize(() -> blockHeaderFunctions.hash(this));
-    this.parsedExtraData = Suppliers.memoize(() -> blockHeaderFunctions.parseExtraData(this));
-    this.privateLogsBloom = privateLogsBloom;
-  }
-
-  public BlockHeader(
-      final Hash parentHash,
-      final Hash ommersHash,
-      final Address coinbase,
-      final Hash stateRoot,
-      final Hash transactionsRoot,
-      final Hash receiptsRoot,
-      final LogsBloomFilter logsBloom,
-      final Difficulty difficulty,
-      final long number,
-      final long gasLimit,
-      final long gasUsed,
-      final long timestamp,
-      final Bytes extraData,
-      final Wei baseFee,
-      final Bytes32 mixHashOrPrevRandao,
-      final long nonce,
-      final Hash withdrawalsRoot,
-      final DataGas excessDataGas,
+      final Long blobGasUsed,
+      final BlobGas excessBlobGas,
+      final Bytes32 parentBeaconBlockRoot,
+      final Hash depositsRoot,
       final BlockHeaderFunctions blockHeaderFunctions) {
     super(
         parentHash,
@@ -128,11 +83,13 @@ public class BlockHeader extends SealableBlockHeader
         baseFee,
         mixHashOrPrevRandao,
         withdrawalsRoot,
-        excessDataGas);
+        blobGasUsed,
+        excessBlobGas,
+        parentBeaconBlockRoot,
+        depositsRoot);
     this.nonce = nonce;
     this.hash = Suppliers.memoize(() -> blockHeaderFunctions.hash(this));
     this.parsedExtraData = Suppliers.memoize(() -> blockHeaderFunctions.parseExtraData(this));
-    this.privateLogsBloom = Optional.empty();
   }
 
   /**
@@ -183,31 +140,6 @@ public class BlockHeader extends SealableBlockHeader
     return hash.get();
   }
 
-  public LogsBloomFilter getLogsBloom(final boolean addPrivateBloom) {
-    if (addPrivateBloom && privateLogsBloom.isPresent()) {
-      return LogsBloomFilter.builder()
-          .insertFilter(logsBloom)
-          .insertFilter(privateLogsBloom.get())
-          .build();
-    } else {
-      return logsBloom;
-    }
-  }
-
-  public void setPrivateLogsBloom(final LogsBloomFilter privateLogsBloom) {
-    this.privateLogsBloom = Optional.ofNullable(privateLogsBloom);
-  }
-
-  /**
-   * Returns the block's private logs bloom filter that might be available if we are in goQuorum
-   * mode
-   *
-   * @return the private logs bloom filter
-   */
-  public Optional<LogsBloomFilter> getPrivateLogsBloom() {
-    return privateLogsBloom;
-  }
-
   /**
    * Write an RLP representation.
    *
@@ -237,8 +169,15 @@ public class BlockHeader extends SealableBlockHeader
     if (withdrawalsRoot != null) {
       out.writeBytes(withdrawalsRoot);
     }
-    if (excessDataGas != null) {
-      out.writeUInt256Scalar(excessDataGas);
+    if (excessBlobGas != null && blobGasUsed != null) {
+      out.writeLongScalar(blobGasUsed);
+      out.writeUInt64Scalar(excessBlobGas);
+    }
+    if (parentBeaconBlockRoot != null) {
+      out.writeBytes(parentBeaconBlockRoot);
+    }
+    if (depositsRoot != null) {
+      out.writeBytes(depositsRoot);
     }
     out.endList();
   }
@@ -263,9 +202,15 @@ public class BlockHeader extends SealableBlockHeader
     final long nonce = input.readLong();
     final Wei baseFee = !input.isEndOfCurrentList() ? Wei.of(input.readUInt256Scalar()) : null;
     final Hash withdrawalHashRoot =
+        !(input.isEndOfCurrentList() || input.isZeroLengthString())
+            ? Hash.wrap(input.readBytes32())
+            : null;
+    final Long blobGasUsed = !input.isEndOfCurrentList() ? input.readLongScalar() : null;
+    final BlobGas excessBlobGas =
+        !input.isEndOfCurrentList() ? BlobGas.of(input.readLongScalar()) : null;
+    final Bytes32 parentBeaconBlockRoot = !input.isEndOfCurrentList() ? input.readBytes32() : null;
+    final Hash depositHashRoot =
         !input.isEndOfCurrentList() ? Hash.wrap(input.readBytes32()) : null;
-    final DataGas excessDataGas =
-        !input.isEndOfCurrentList() ? DataGas.of(input.readUInt256Scalar()) : null;
     input.leaveList();
     return new BlockHeader(
         parentHash,
@@ -285,7 +230,10 @@ public class BlockHeader extends SealableBlockHeader
         mixHashOrPrevRandao,
         nonce,
         withdrawalHashRoot,
-        excessDataGas,
+        blobGasUsed,
+        excessBlobGas,
+        parentBeaconBlockRoot,
+        depositHashRoot,
         blockHeaderFunctions);
   }
 
@@ -330,8 +278,15 @@ public class BlockHeader extends SealableBlockHeader
     if (withdrawalsRoot != null) {
       sb.append("withdrawalsRoot=").append(withdrawalsRoot).append(", ");
     }
-    if (excessDataGas != null) {
-      sb.append("excessDataGas=").append(excessDataGas);
+    if (blobGasUsed != null && excessBlobGas != null) {
+      sb.append("blobGasUsed=").append(blobGasUsed).append(", ");
+      sb.append("excessBlobGas=").append(excessBlobGas).append(", ");
+    }
+    if (parentBeaconBlockRoot != null) {
+      sb.append("parentBeaconBlockRoot=").append(parentBeaconBlockRoot).append(", ");
+    }
+    if (depositsRoot != null) {
+      sb.append("depositsRoot=").append(depositsRoot);
     }
     return sb.append("}").toString();
   }
@@ -360,7 +315,13 @@ public class BlockHeader extends SealableBlockHeader
             .getWithdrawalsRoot()
             .map(h -> Hash.fromHexString(h.toHexString()))
             .orElse(null),
-        pluginBlockHeader.getExcessDataGas().map(DataGas::fromQuantity).orElse(null),
+        pluginBlockHeader.getBlobGasUsed().map(Long::longValue).orElse(null),
+        pluginBlockHeader.getExcessBlobGas().map(BlobGas::fromQuantity).orElse(null),
+        pluginBlockHeader.getParentBeaconBlockRoot().orElse(null),
+        pluginBlockHeader
+            .getDepositsRoot()
+            .map(h -> Hash.fromHexString(h.toHexString()))
+            .orElse(null),
         blockHeaderFunctions);
   }
 

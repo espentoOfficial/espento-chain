@@ -1,5 +1,5 @@
 /*
- * Copyright contributors to Hyperledger Besu
+ * Copyright Hyperledger Besu Contributors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
  * the License. You may obtain a copy of the License at
@@ -23,11 +23,11 @@ import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.SnapDataRequest;
 import org.hyperledger.besu.ethereum.eth.sync.snapsync.request.StorageRangeDataRequest;
 import org.hyperledger.besu.ethereum.proof.WorldStateProofProvider;
 import org.hyperledger.besu.ethereum.rlp.RLP;
-import org.hyperledger.besu.ethereum.trie.MerklePatriciaTrie;
+import org.hyperledger.besu.ethereum.trie.MerkleTrie;
 import org.hyperledger.besu.ethereum.trie.RangeStorageEntriesCollector;
-import org.hyperledger.besu.ethereum.trie.StoredMerklePatriciaTrie;
 import org.hyperledger.besu.ethereum.trie.TrieIterator;
-import org.hyperledger.besu.ethereum.worldstate.DataStorageFormat;
+import org.hyperledger.besu.ethereum.trie.patricia.StoredMerklePatriciaTrie;
+import org.hyperledger.besu.ethereum.worldstate.DataStorageConfiguration;
 import org.hyperledger.besu.ethereum.worldstate.StateTrieAccountValue;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateStorage;
 import org.hyperledger.besu.services.tasks.Task;
@@ -44,12 +44,13 @@ public class TaskGenerator {
   public static List<Task<SnapDataRequest>> createAccountRequest(final boolean withData) {
 
     final WorldStateStorage worldStateStorage =
-        new InMemoryKeyValueStorageProvider().createWorldStateStorage(DataStorageFormat.FOREST);
+        new InMemoryKeyValueStorageProvider()
+            .createWorldStateStorage(DataStorageConfiguration.DEFAULT_CONFIG);
 
     final WorldStateProofProvider worldStateProofProvider =
         new WorldStateProofProvider(worldStateStorage);
 
-    final MerklePatriciaTrie<Bytes, Bytes> trie = TrieGenerator.generateTrie(worldStateStorage, 1);
+    final MerkleTrie<Bytes, Bytes> trie = TrieGenerator.generateTrie(worldStateStorage, 1);
     final RangeStorageEntriesCollector collector =
         RangeStorageEntriesCollector.createCollector(
             Bytes32.ZERO, RangeManager.MAX_RANGE, 1, Integer.MAX_VALUE);

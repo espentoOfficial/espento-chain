@@ -20,20 +20,21 @@ import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.TransactionTraceParams;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.Tracer;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.processor.TransactionTracer;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcError;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcSuccessResponse;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
 import org.hyperledger.besu.ethereum.api.query.BlockchainQueries;
 import org.hyperledger.besu.ethereum.core.Block;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Suppliers;
 
 public class DebugStandardTraceBlockToFile implements JsonRpcMethod {
@@ -74,19 +75,23 @@ public class DebugStandardTraceBlockToFile implements JsonRpcMethod {
                         traceBlock(block, transactionTraceParams)))
         .orElse(
             new JsonRpcErrorResponse(
-                requestContext.getRequest().getId(), JsonRpcError.BLOCK_NOT_FOUND));
+                requestContext.getRequest().getId(), RpcErrorType.BLOCK_NOT_FOUND));
   }
 
   protected List<String> traceBlock(
       final Block block, final Optional<TransactionTraceParams> transactionTraceParams) {
-    return transactionTracerSupplier
-        .get()
-        .traceTransactionToFile(
-            block.getHash(), transactionTraceParams, dataDir.resolve(TRACE_PATH));
-  }
-
-  protected Object emptyResult() {
-    final ObjectMapper mapper = new ObjectMapper();
-    return mapper.createArrayNode();
+    return Tracer.processTracing(
+            blockchainQueries.get(),
+            Optional.of(block.getHeader()),
+            mutableWorldState ->
+                Optional.of(
+                    transactionTracerSupplier
+                        .get()
+                        .traceTransactionToFile(
+                            mutableWorldState,
+                            block.getHash(),
+                            transactionTraceParams,
+                            dataDir.resolve(TRACE_PATH))))
+        .orElse(new ArrayList<>());
   }
 }

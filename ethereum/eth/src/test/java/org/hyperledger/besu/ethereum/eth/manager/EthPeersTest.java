@@ -39,8 +39,8 @@ import java.util.OptionalLong;
 import java.util.concurrent.CancellationException;
 import java.util.function.Consumer;
 
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.mockito.stubbing.Answer;
 
 public class EthPeersTest {
@@ -51,7 +51,7 @@ public class EthPeersTest {
   private final RequestManager.ResponseStream responseStream =
       mock(RequestManager.ResponseStream.class);
 
-  @Before
+  @BeforeEach
   public void setup() throws Exception {
     when(peerRequest.sendRequest(any())).thenReturn(responseStream);
     ethProtocolManager = EthProtocolManagerTestUtil.create();
@@ -338,29 +338,13 @@ public class EthPeersTest {
   }
 
   @Test
-  public void removeClosedConnectionWhenStreamAvailablePeers() {
-    final RespondingEthPeer peer = EthProtocolManagerTestUtil.createPeer(ethProtocolManager, 1000);
-
-    // Check connection is there and connection was not removed
-    ethPeers.streamAvailablePeers();
-    assertThat(ethPeers.streamAllPeers().count()).isEqualTo(1);
-
-    // Disconnect peer
-    peer.getEthPeer().disconnect(DisconnectReason.UNKNOWN);
-
-    // Call method again, connection should be removed
-    ethPeers.streamAvailablePeers();
-    assertThat(ethPeers.streamAllPeers().count()).isEqualTo(0);
-  }
-
-  @Test
   public void toString_hasExpectedInfo() {
     assertThat(ethPeers.toString()).isEqualTo("0 EthPeers {}");
 
     final EthPeer peerA =
         EthProtocolManagerTestUtil.createPeer(ethProtocolManager, Difficulty.of(50), 20)
             .getEthPeer();
-    ethPeers.registerConnection(peerA.getConnection(), Collections.emptyList());
+    ethPeers.registerNewConnection(peerA.getConnection(), Collections.emptyList());
     assertThat(ethPeers.toString()).contains("1 EthPeers {");
     assertThat(ethPeers.toString()).contains(peerA.getShortNodeId());
   }

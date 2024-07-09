@@ -17,8 +17,10 @@ package org.hyperledger.besu.tests.acceptance.dsl.node;
 import static com.google.common.base.Preconditions.checkState;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
+import org.hyperledger.besu.cli.options.TransactionPoolOptions;
 import org.hyperledger.besu.cli.options.unstable.NetworkingOptions;
 import org.hyperledger.besu.ethereum.api.jsonrpc.ipc.JsonRpcIpcConfiguration;
+import org.hyperledger.besu.ethereum.eth.transactions.ImmutableTransactionPoolConfiguration;
 import org.hyperledger.besu.ethereum.p2p.rlpx.connections.netty.TLSConfiguration;
 import org.hyperledger.besu.ethereum.permissioning.PermissioningConfiguration;
 import org.hyperledger.besu.metrics.prometheus.MetricsConfiguration;
@@ -98,6 +100,15 @@ public class ProcessBesuNodeRunner implements BesuNodeRunner {
     params.add("--p2p-port");
     params.add(node.getP2pPort());
 
+    params.addAll(
+        TransactionPoolOptions.fromConfig(
+                ImmutableTransactionPoolConfiguration.builder()
+                    .from(node.getTransactionPoolConfiguration())
+                    .strictTransactionReplayProtectionEnabled(
+                        node.isStrictTxReplayProtectionEnabled())
+                    .build())
+            .getCLIOptions());
+
     if (node.getMiningParameters().isMiningEnabled()) {
       params.add("--miner-enabled");
       params.add("--miner-coinbase");
@@ -110,9 +121,11 @@ public class ProcessBesuNodeRunner implements BesuNodeRunner {
       params.add(
           Integer.toString(node.getMiningParameters().getMinTransactionGasPrice().intValue()));
       params.add("--Xminer-remote-sealers-limit");
-      params.add(Integer.toString(node.getMiningParameters().getRemoteSealersLimit()));
+      params.add(
+          Integer.toString(node.getMiningParameters().getUnstable().getRemoteSealersLimit()));
       params.add("--Xminer-remote-sealers-hashrate-ttl");
-      params.add(Long.toString(node.getMiningParameters().getRemoteSealersTimeToLive()));
+      params.add(
+          Long.toString(node.getMiningParameters().getUnstable().getRemoteSealersTimeToLive()));
     }
     if (node.getMiningParameters().isStratumMiningEnabled()) {
       params.add("--miner-stratum-enabled");
@@ -389,9 +402,6 @@ public class ProcessBesuNodeRunner implements BesuNodeRunner {
     params.add("--auto-log-bloom-caching-enabled");
     params.add("false");
 
-    params.add("--strict-tx-replay-protection-enabled");
-    params.add(Boolean.toString(node.isStrictTxReplayProtectionEnabled()));
-
     final String level = System.getProperty("root.log.level");
     if (level != null) {
       params.add("--logging=" + level);
@@ -421,6 +431,24 @@ public class ProcessBesuNodeRunner implements BesuNodeRunner {
                 + "acceptance-tests/tests/build/resources/test/acceptanceTesting.security");
     // add additional environment variables
     processBuilder.environment().putAll(node.getEnvironment());
+
+    try {
+      int debugPort = Integer.parseInt(System.getenv("BESU_DEBUG_CHILD_PROCESS_PORT"));
+      LOG.warn("Waiting for debugger to attach to SUSPENDED child process");
+      String debugOpts =
+          " -agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:" + debugPort;
+      String prevJavaOpts = processBuilder.environment().get("JAVA_OPTS");
+      if (prevJavaOpts == null) {
+        processBuilder.environment().put("JAVA_OPTS", debugOpts);
+      } else {
+        processBuilder.environment().put("JAVA_OPTS", prevJavaOpts + debugOpts);
+      }
+
+    } catch (NumberFormatException e) {
+      LOG.debug(
+          "Child process may be attached to by exporting BESU_DEBUG_CHILD_PROCESS_PORT=<port> to env");
+    }
+
     try {
       checkState(
           isNotAliveOrphan(node.getName()),

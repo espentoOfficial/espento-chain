@@ -30,8 +30,6 @@ import org.hyperledger.besu.ethereum.core.MutableWorldState;
 import org.hyperledger.besu.ethereum.referencetests.ReferenceTestBlockchain;
 import org.hyperledger.besu.ethereum.referencetests.ReferenceTestWorldState;
 
-import java.util.Optional;
-
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,8 +42,7 @@ public class MainnetBlockProcessorTest extends AbstractBlockProcessorTest {
       mock(MainnetTransactionProcessor.class);
   private final AbstractBlockProcessor.TransactionReceiptFactory transactionReceiptFactory =
       mock(AbstractBlockProcessor.TransactionReceiptFactory.class);
-  private final HeaderBasedProtocolSchedule protocolSchedule =
-      mock(HeaderBasedProtocolSchedule.class);
+  private final ProtocolSchedule protocolSchedule = mock(ProtocolSchedule.class);
   private final ProtocolSpec protocolSpec = mock(ProtocolSpec.class);
 
   @BeforeEach
@@ -63,7 +60,6 @@ public class MainnetBlockProcessorTest extends AbstractBlockProcessorTest {
             Wei.ZERO,
             BlockHeader::getCoinbase,
             true,
-            Optional.empty(),
             protocolSchedule);
 
     final MutableWorldState worldState = ReferenceTestWorldState.create(emptyMap());
@@ -90,7 +86,6 @@ public class MainnetBlockProcessorTest extends AbstractBlockProcessorTest {
             Wei.ZERO,
             BlockHeader::getCoinbase,
             false,
-            Optional.empty(),
             protocolSchedule);
 
     final MutableWorldState worldState = ReferenceTestWorldState.create(emptyMap());
@@ -99,6 +94,9 @@ public class MainnetBlockProcessorTest extends AbstractBlockProcessorTest {
     final BlockHeader emptyBlockHeader =
         new BlockHeaderTestFixture()
             .transactionsRoot(Hash.EMPTY_LIST_HASH)
+            .stateRoot(
+                Hash.fromHexString(
+                    "0xa6b5d50f7b3c39b969c2fe8fed091939c674fef49b4826309cb6994361e39b71"))
             .ommersHash(Hash.EMPTY_LIST_HASH)
             .buildHeader();
     blockProcessor.processBlock(blockchain, worldState, emptyBlockHeader, emptyList(), emptyList());

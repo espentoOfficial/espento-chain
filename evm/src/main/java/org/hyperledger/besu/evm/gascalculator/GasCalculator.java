@@ -14,9 +14,9 @@
  */
 package org.hyperledger.besu.evm.gascalculator;
 
+import org.hyperledger.besu.datatypes.AccessListEntry;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Wei;
-import org.hyperledger.besu.evm.AccessListEntry;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.operation.BalanceOperation;
@@ -40,8 +40,8 @@ import org.hyperledger.besu.evm.precompile.SHA256PrecompiledContract;
 import org.hyperledger.besu.evm.processor.AbstractMessageProcessor;
 
 import java.util.List;
+import java.util.function.Supplier;
 
-import com.google.common.base.Supplier;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.units.bigints.UInt256;
 
@@ -438,7 +438,7 @@ public interface GasCalculator {
   long codeDepositGasCost(int codeSize);
 
   /**
-   * Returns the intrinsic gas cost of a transaction pauload, i.e. the cost deriving from its
+   * Returns the intrinsic gas cost of a transaction payload, i.e. the cost deriving from its
    * encoded binary representation when stored on-chain.
    *
    * @param transactionPayload The encoded transaction, as bytes
@@ -456,7 +456,7 @@ public interface GasCalculator {
   default long accessListGasCost(final List<AccessListEntry> accessListEntries) {
     return accessListGasCost(
         accessListEntries.size(),
-        accessListEntries.stream().mapToInt(e -> e.getStorageKeys().size()).sum());
+        accessListEntries.stream().mapToInt(e -> e.storageKeys().size()).sum());
   }
 
   /**
@@ -489,6 +489,13 @@ public interface GasCalculator {
   long getMaximumTransactionCost(int size);
 
   /**
+   * Minimum gas cost of a transaction.
+   *
+   * @return the minimum gas cost
+   */
+  long getMinimumTransactionCost();
+
+  /**
    * Returns the cost of a loading from Transient Storage
    *
    * @return the cost of a TLOAD from a storage slot
@@ -503,6 +510,39 @@ public interface GasCalculator {
    * @return the cost of a TSTORE to a storage slot
    */
   default long getTransientStoreOperationGasCost() {
+    return 0L;
+  }
+
+  /**
+   * Return the gas cost given the number of blobs
+   *
+   * @param blobCount the number of blobs
+   * @return the total gas cost
+   */
+  default long blobGasCost(final int blobCount) {
+    return 0L;
+  }
+
+  /**
+   * Compute the new value for the excess blob gas, given the parent value and the count of new
+   * blobs
+   *
+   * @param parentExcessBlobGas excess blob gas from the parent
+   * @param newBlobs count of new blobs
+   * @return the new excess blob gas value
+   */
+  default long computeExcessBlobGas(final long parentExcessBlobGas, final int newBlobs) {
+    return 0L;
+  }
+
+  /**
+   * Compute the new value for the excess blob gas, given the parent value and the blob gas used
+   *
+   * @param parentExcessBlobGas excess blob gas from the parent
+   * @param blobGasUsed blob gas used
+   * @return the new excess blob gas value
+   */
+  default long computeExcessBlobGas(final long parentExcessBlobGas, final long blobGasUsed) {
     return 0L;
   }
 }

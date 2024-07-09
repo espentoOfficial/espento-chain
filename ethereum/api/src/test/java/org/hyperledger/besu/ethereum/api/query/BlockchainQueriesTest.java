@@ -46,14 +46,14 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.apache.tuweni.units.bigints.UInt256;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class BlockchainQueriesTest {
   private BlockDataGenerator gen;
   private EthScheduler scheduler;
 
-  @Before
+  @BeforeEach
   public void setup() {
     gen = new BlockDataGenerator();
     scheduler = new EthScheduler(1, 1, 1, 1, new NoOpMetricsSystem());
@@ -194,6 +194,17 @@ public class BlockchainQueriesTest {
     // Check that number has incremented
     result = queries.headBlockNumber();
     assertThat(result).isEqualTo(3L);
+  }
+
+  @Test
+  public void getHeadBlockHeader() {
+    final BlockchainWithData data = setupBlockchain(3);
+    final BlockchainQueries queries = data.blockchainQueries;
+
+    final BlockHeader targetBlockHeader = data.blockData.get(2).block.getHeader();
+
+    BlockHeader result = queries.headBlockHeader();
+    assertThat(targetBlockHeader).isEqualTo(result);
   }
 
   @Test

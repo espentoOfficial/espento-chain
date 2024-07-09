@@ -35,10 +35,9 @@ dependencies {
   implementation project(':consensus:clique')
   implementation project(':consensus:common')
   implementation project(':consensus:ibft')
-  implementation project(':consensus:ibftlegacy')
   implementation project(':consensus:merge')
   implementation project(':consensus:qbft')
-  implementation project(':crypto')
+  implementation project(':crypto:services')
   implementation project(':datatypes')
   implementation project(':enclave')
   implementation project(':ethereum:api')
@@ -64,36 +63,38 @@ dependencies {
   implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jdk8'
   implementation 'com.github.oshi:oshi-core'
   implementation 'com.google.guava:guava'
+  implementation 'com.google.dagger:dagger'
   implementation 'com.graphql-java:graphql-java'
   implementation 'info.picocli:picocli'
   implementation 'io.vertx:vertx-core'
   implementation 'io.vertx:vertx-web'
   implementation 'org.apache.commons:commons-lang3'
   implementation 'org.apache.logging.log4j:log4j-core'
-  implementation 'org.apache.tuweni:tuweni-bytes'
-  implementation 'org.apache.tuweni:tuweni-config'
-  implementation 'org.apache.tuweni:tuweni-toml'
-  implementation 'org.apache.tuweni:tuweni-units'
+  implementation 'io.tmio:tuweni-bytes'
+  implementation 'io.tmio:tuweni-config'
+  implementation 'io.tmio:tuweni-toml'
+  implementation 'io.tmio:tuweni-units'
   implementation 'org.springframework.security:spring-security-crypto'
   implementation 'org.xerial.snappy:snappy-java'
-  implementation 'net.consensys.services:quorum-mainnet-launcher'
+  implementation 'tech.pegasys:jc-kzg-4844'
+  implementation 'org.rocksdb:rocksdbjni'
 
   runtimeOnly 'org.apache.logging.log4j:log4j-jul'
   runtimeOnly 'com.splunk.logging:splunk-library-javalogging'
   runtimeOnly 'org.fusesource.jansi:jansi' // for color logging in windows
 
   testImplementation project(path: ':ethereum:core', configuration: 'testSupportArtifacts')
-  testImplementation project(path: ':crypto', configuration: 'testSupportArtifacts')
+  testImplementation project(path: ':crypto:services', configuration: 'testSupportArtifacts')
   testImplementation project(':testutil')
 
   testImplementation 'com.google.auto.service:auto-service'
   testImplementation 'com.squareup.okhttp3:okhttp'
   testImplementation 'commons-io:commons-io'
   testImplementation 'io.opentelemetry:opentelemetry-api'
-  testImplementation 'junit:junit'
+  testImplementation 'org.mockito:mockito-junit-jupiter'
   testImplementation 'org.apache.commons:commons-text'
-  testImplementation 'org.apache.tuweni:tuweni-bytes'
-  testImplementation 'org.apache.tuweni:tuweni-units'
+  testImplementation 'io.tmio:tuweni-bytes'
+  testImplementation 'io.tmio:tuweni-units'
   testImplementation 'org.assertj:assertj-core'
   testImplementation 'org.awaitility:awaitility'
   testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -101,5 +102,5 @@ dependencies {
   testImplementation 'org.testcontainers:testcontainers'
   testImplementation 'tech.pegasys.discovery:discovery'
 
-  testRuntimeOnly 'org.junit.vintage:junit-vintage-engine'
+  annotationProcessor 'com.google.dagger:dagger-compiler'
 }

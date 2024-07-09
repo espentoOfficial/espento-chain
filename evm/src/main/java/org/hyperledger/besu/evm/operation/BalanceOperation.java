@@ -20,11 +20,11 @@ import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.frame.ExceptionalHaltReason;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
-import org.hyperledger.besu.evm.internal.FixedStack.OverflowException;
-import org.hyperledger.besu.evm.internal.FixedStack.UnderflowException;
+import org.hyperledger.besu.evm.internal.OverflowException;
+import org.hyperledger.besu.evm.internal.UnderflowException;
 import org.hyperledger.besu.evm.internal.Words;
 
-import org.apache.tuweni.units.bigints.UInt256;
+import org.apache.tuweni.bytes.Bytes;
 
 /** The Balance operation. */
 public class BalanceOperation extends AbstractOperation {
@@ -62,7 +62,7 @@ public class BalanceOperation extends AbstractOperation {
         return new OperationResult(cost, ExceptionalHaltReason.INSUFFICIENT_GAS);
       } else {
         final Account account = frame.getWorldUpdater().get(address);
-        frame.pushStackItem(account == null ? UInt256.ZERO : account.getBalance());
+        frame.pushStackItem(account == null ? Bytes.EMPTY : account.getBalance());
         return new OperationResult(cost, null);
       }
     } catch (final UnderflowException ufe) {
